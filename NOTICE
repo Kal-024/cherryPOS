@@ -1,0 +1,87 @@
+cherryPOS — Avisos de componentes de terceros
+Copyright (c) 2026 Harvey Vilchez. Todos los derechos reservados.
+
+cherryPOS es software propietario (ver LICENSE) e incorpora bibliotecas de
+terceros que conservan sus propias licencias. Este archivo cumple con la
+obligación de atribución de esas licencias y debe acompañar a cualquier copia
+distribuida del producto, incluidas las imágenes de contenedor.
+
+
+═══ Resumen ════════════════════════════════════════════════════════════════
+
+Backend (PHP / Composer) — 132 paquetes
+  MIT ................. 93      BSD-3-Clause ........ 33
+  Apache-2.0 ........... 3      LGPL (ver abajo) ..... 3
+  Otros ................ 3
+
+Frontend (Node / pnpm, solo producción) — 285 paquetes
+  MIT ................ 259      Apache-2.0 ........... 8
+  ISC .................. 7      BSD-2-Clause ......... 3
+  MPL-2.0 .............. 2      BSD-3-Clause ......... 2
+  Otros ................ 4
+
+Las licencias MIT, BSD, ISC y Apache-2.0 permiten el uso en software cerrado y
+exigen **conservar su aviso de copyright**. El texto completo de cada una viaja
+dentro del paquete correspondiente, en `vendor/` y en `node_modules/`.
+
+
+═══ Componentes principales ════════════════════════════════════════════════
+
+  laravel/framework ......... MIT
+  laravel/sanctum ........... MIT
+  maatwebsite/excel ......... MIT
+  darkaonline/l5-swagger .... MIT
+  barryvdh/laravel-dompdf ... MIT
+  vue ....................... MIT
+  vue-router ................ MIT
+  vue-i18n .................. MIT
+  @nuxt/ui .................. MIT
+  tailwindcss ............... MIT
+  zod ....................... MIT
+
+
+═══ Casos que piden atención ═══════════════════════════════════════════════
+
+dompdf/dompdf (LGPL-2.1), dompdf/php-font-lib (LGPL-2.1+),
+dompdf/php-svg-lib (LGPL-3.0+)
+
+  Generan los comprobantes en PDF. La LGPL permite usarlos desde software
+  propietario **sin contagiar la licencia**, siempre que se cumplan tres cosas,
+  y las tres se cumplen hoy:
+
+    1. no se modifica el código de dompdf — se usa tal como lo instala Composer;
+    2. este aviso menciona su uso y su licencia;
+    3. la biblioteca es reemplazable: vive como paquete aparte en `vendor/` y el
+       cliente puede sustituirla por otra versión.
+
+  Si alguna vez se parchea dompdf dentro del producto, esa modificación queda
+  bajo LGPL y hay que publicarla. Vale la pena releer esto antes de tocar nada
+  dentro de `vendor/dompdf/`.
+
+nette/schema, nette/utils (BSD-3-Clause o GPL-2.0 o GPL-3.0, a elección)
+
+  Son dependencias transitivas de las herramientas de Laravel y ofrecen tres
+  licencias alternativas. **cherryPOS las usa bajo BSD-3-Clause**, que permite el
+  uso en software cerrado. La opción GPL no se ejerce.
+
+lightningcss (MPL-2.0)
+
+  Herramienta de compilación de CSS. La MPL obliga a publicar únicamente las
+  modificaciones a sus propios archivos, y no se modifica: se usa como viene.
+  No forma parte del producto distribuido, solo del proceso de compilación.
+
+vaul-vue (licencia no declarada en su paquete)
+
+  Dependencia transitiva de `@nuxt/ui`. Su repositorio la publica bajo MIT, pero
+  el paquete no lo declara. Conviene confirmarlo antes de una distribución
+  comercial amplia.
+
+
+═══ Cómo regenerar estas listas ════════════════════════════════════════════
+
+  cd apps/api && composer licenses
+  pnpm licenses list --prod
+
+Conviene rehacerlo antes de cada entrega: una dependencia nueva puede traer una
+licencia que obligue a algo, y descubrirlo después de firmar con un cliente es
+el peor momento.

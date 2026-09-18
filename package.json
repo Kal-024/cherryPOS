@@ -1,6 +1,7 @@
 {
   "name": "cherrypos",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "packageManager": "pnpm@10.28.1",
   "engines": {

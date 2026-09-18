@@ -2,6 +2,7 @@
   "name": "@cherrypos/calc",
   "version": "0.1.0",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "description": "Motor de cálculo de cherryPOS. Espejo exacto de App\\Services\\Calc en apps/api.",
   "main": "./dist/index.js",

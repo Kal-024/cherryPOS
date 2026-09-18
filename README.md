@@ -68,3 +68,13 @@ no puede reponer solo:
 - `docs/OPERACION.md` — instalación, respaldo y recuperación. Es lo que se lee
   cuando hay que restaurar un servidor, y los guiones de `deploy/scripts/` lo
   citan por sección.
+
+## Licencia
+
+**Software propietario.** Copyright (c) 2026 Harvey Vilchez. Todos los derechos
+reservados — ver [`LICENSE`](LICENSE). Que este repositorio sea visible no
+concede ningún derecho de uso: eso se otorga únicamente por contrato firmado.
+
+Los componentes de terceros conservan sus licencias y se listan en
+[`NOTICE`](NOTICE), que debe acompañar a cualquier copia distribuida del
+producto.

@@ -1,0 +1,77 @@
+cherryPOS — Licencia propietaria
+Copyright (c) 2026 Harvey Vilchez. Todos los derechos reservados.
+
+
+1. Titularidad
+
+   cherryPOS, su código fuente, su documentación, su base de datos, su diseño de
+   interfaz y cualquier material derivado son propiedad exclusiva del titular
+   del copyright indicado arriba y están protegidos por las leyes de derecho de
+   autor de Nicaragua y por los tratados internacionales aplicables, entre ellos
+   el Convenio de Berna.
+
+
+2. Ningún derecho concedido
+
+   Este software NO es de código abierto ni de uso libre. Salvo autorización
+   escrita y expresa del titular, queda prohibido:
+
+   a) usar el software, total o parcialmente, con cualquier fin;
+   b) copiarlo, publicarlo, distribuirlo, sublicenciarlo, venderlo o alquilarlo;
+   c) modificarlo o crear obras derivadas;
+   d) descompilarlo o someterlo a ingeniería inversa;
+   e) retirar o alterar los avisos de titularidad.
+
+   Que este repositorio sea visible públicamente no concede ninguno de esos
+   derechos. La visibilidad del código no es una licencia de uso.
+
+
+3. Uso autorizado por contrato
+
+   El derecho de uso de cherryPOS se concede únicamente mediante un contrato de
+   licencia firmado con el titular, y se rige por los términos de ese contrato:
+   alcance, cantidad de terminales, sucursales, vigencia, soporte y
+   actualizaciones. Ante cualquier discrepancia entre este archivo y el contrato
+   firmado, prevalece el contrato.
+
+
+4. Componentes de terceros
+
+   cherryPOS incorpora bibliotecas de terceros con licencias propias —MIT, BSD,
+   Apache 2.0, LGPL y otras—, que se listan con sus avisos en el archivo NOTICE.
+   Esta licencia no altera los derechos ni las obligaciones que corresponden a
+   esos componentes bajo sus respectivas licencias.
+
+
+5. Sin garantía
+
+   El software se entrega "tal cual", sin garantía de ningún tipo, expresa o
+   implícita, incluidas las de comerciabilidad, idoneidad para un fin
+   determinado y no infracción. En ningún caso el titular responderá por daños
+   derivados del uso o de la imposibilidad de uso del software, más allá de lo
+   que establezca el contrato de licencia firmado y de lo que la ley
+   nicaragüense declare irrenunciable.
+
+
+6. Contacto
+
+   Para licenciamiento, distribución o cualquier uso no cubierto aquí:
+   Harvey Vilchez — vilchezharvey747@outlook.com
+
+
+─────────────────────────────────────────────────────────────────────────────
+
+ENGLISH SUMMARY (non-binding; the Spanish text above governs)
+
+cherryPOS is proprietary software. Copyright (c) 2026 Harvey Vilchez.
+All rights reserved.
+
+No permission is granted to use, copy, modify, distribute, sell or reverse
+engineer this software, in whole or in part. Public visibility of this
+repository does not grant any license. Usage rights are granted solely through
+a signed license agreement with the copyright holder.
+
+Third-party components are listed in NOTICE and remain under their own
+licenses. The software is provided "as is", without warranty of any kind.
+
+Licensing enquiries: vilchezharvey747@outlook.com
