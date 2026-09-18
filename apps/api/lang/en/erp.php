@@ -1,0 +1,25 @@
+<?php
+
+return [
+    'tax_difference_title' => 'Tax difference with the ERP',
+    'tax_difference_body' => 'The ERP computed a :difference tax difference on this ticket. If it repeats, the two calculation engines are diverging.',
+    'exception_title' => 'Ticket rejected by the ERP',
+    'exception_body' => 'The send failed with code :code. The sale is paid; the tax document was not issued.',
+    'outbox_empty' => 'No pending deliveries or exceptions.',
+    'outbox_retrieved' => 'Outbox retrieved.',
+    'entry_retrieved' => 'Entry retrieved.',
+    'entry_not_found' => 'Entry not found.',
+    'entry_requeued' => 'Entry sent back to the queue.',
+    'entry_resolved' => 'Exception closed manually.',
+    'only_exceptions_retry' => 'Only entries in exception can be retried.',
+    'only_exceptions_resolve' => 'Only entries in exception can be closed manually.',
+    'status_retrieved' => 'Integration status retrieved.',
+    'not_configured' => 'No ERP is configured: the POS runs on its own.',
+    'settings_pulled' => 'ERP settings applied.',
+    'pull_failed' => 'The ERP did not answer: :error',
+    'masters_pulled' => 'Catalogue and customers read from the ERP.',
+    'reconciliation_retrieved' => 'Reconciliation tray retrieved.',
+    'reconciliation_empty' => 'Nothing pending reconciliation.',
+    'reconciliation_not_found' => 'Reconciliation entry not found.',
+    'reconciliation_resolved' => 'Reconciliation closed.',
+];

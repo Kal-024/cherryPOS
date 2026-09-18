@@ -1,0 +1,151 @@
+{
+  "suite": "devoluciones",
+  "cases": [
+    {
+      "name": "devolucion-parcial",
+      "description": "Se devuelve una de las tres unidades vendidas. En el POS la devolución lleva cantidad negativa; el adaptador del ERP la traduce a líneas positivas con totales negativos (§4 del contrato). El redondeo half-up es simétrico a propósito: la devolución es el negativo exacto de su venta, sin centavo colgando.",
+      "input": {
+        "config": {
+          "currency": "NIO"
+        },
+        "lines": [
+          {
+            "id": "1",
+            "qty": "-1",
+            "unitPrice": "100.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          }
+        ],
+        "payments": [
+          {
+            "method": "cash",
+            "amount": "-115.00"
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "1",
+            "gross": "-100.00",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "0.00",
+            "taxableBase": "-100.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "-100.00",
+                "amount": "-15.00"
+              }
+            ],
+            "taxTotal": "-15.00",
+            "total": "-115.00"
+          }
+        ],
+        "gross": "-100.00",
+        "lineDiscountTotal": "0.00",
+        "saleDiscount": "0.00",
+        "discountTotal": "0.00",
+        "subtotal": "-100.00",
+        "taxableBase": "-100.00",
+        "exemptTotal": "0.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "-100.00",
+            "amount": "-15.00"
+          }
+        ],
+        "taxTotal": "-15.00",
+        "total": "-115.00",
+        "cashRounding": "0.00",
+        "cashTotal": "-115.00",
+        "tip": "0.00",
+        "due": "-115.00",
+        "paid": "-115.00",
+        "change": "0.00",
+        "balance": "0.00"
+      }
+    },
+    {
+      "name": "devolucion-parcial-con-descuento",
+      "description": "Devolución de una línea que en su venta llevaba 10 % de descuento: el descuento se devuelve con ella, no se pierde.",
+      "input": {
+        "config": {
+          "currency": "NIO"
+        },
+        "lines": [
+          {
+            "id": "1",
+            "qty": "-2",
+            "unitPrice": "249.99",
+            "discount": {
+              "type": "percent",
+              "value": "10"
+            },
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "1",
+            "gross": "-499.98",
+            "lineDiscount": "-50.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "-50.00",
+            "taxableBase": "-449.98",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "-449.98",
+                "amount": "-67.50"
+              }
+            ],
+            "taxTotal": "-67.50",
+            "total": "-517.48"
+          }
+        ],
+        "gross": "-499.98",
+        "lineDiscountTotal": "-50.00",
+        "saleDiscount": "0.00",
+        "discountTotal": "-50.00",
+        "subtotal": "-449.98",
+        "taxableBase": "-449.98",
+        "exemptTotal": "0.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "-449.98",
+            "amount": "-67.50"
+          }
+        ],
+        "taxTotal": "-67.50",
+        "total": "-517.48",
+        "cashRounding": "0.00",
+        "cashTotal": "-517.48",
+        "tip": "0.00",
+        "due": "-517.48",
+        "paid": "0.00",
+        "change": "0.00",
+        "balance": "-517.48"
+      }
+    }
+  ]
+}

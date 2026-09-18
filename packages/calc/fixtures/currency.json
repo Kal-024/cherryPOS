@@ -1,0 +1,161 @@
+{
+  "suite": "doble-moneda",
+  "cases": [
+    {
+      "name": "pago-dolares-vuelto-cordobas",
+      "description": "Operación cotidiana de caja en Nicaragua (Q-06): el cliente entrega 20 USD a 36.6243, que equivalen a 732.49 córdobas, y el vuelto sale en córdobas. La tasa viaja con el pago porque se persiste con él.",
+      "input": {
+        "config": {
+          "currency": "NIO"
+        },
+        "lines": [
+          {
+            "id": "1",
+            "qty": "1",
+            "unitPrice": "500.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          }
+        ],
+        "payments": [
+          {
+            "method": "cash",
+            "currency": "USD",
+            "amount": "20.00",
+            "rate": "36.624300"
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "1",
+            "gross": "500.00",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "0.00",
+            "taxableBase": "500.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "500.00",
+                "amount": "75.00"
+              }
+            ],
+            "taxTotal": "75.00",
+            "total": "575.00"
+          }
+        ],
+        "gross": "500.00",
+        "lineDiscountTotal": "0.00",
+        "saleDiscount": "0.00",
+        "discountTotal": "0.00",
+        "subtotal": "500.00",
+        "taxableBase": "500.00",
+        "exemptTotal": "0.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "500.00",
+            "amount": "75.00"
+          }
+        ],
+        "taxTotal": "75.00",
+        "total": "575.00",
+        "cashRounding": "0.00",
+        "cashTotal": "575.00",
+        "tip": "0.00",
+        "due": "575.00",
+        "paid": "732.49",
+        "change": "157.49",
+        "balance": "0.00"
+      }
+    },
+    {
+      "name": "pago-mixto-cordobas-y-dolares",
+      "description": "Mitad en córdobas, mitad en dólares. Cada pago guarda su moneda, su tasa y su equivalente; el saldo pendiente se calcula siempre en moneda base.",
+      "input": {
+        "config": {
+          "currency": "NIO"
+        },
+        "lines": [
+          {
+            "id": "1",
+            "qty": "2",
+            "unitPrice": "500.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          }
+        ],
+        "payments": [
+          {
+            "method": "cash",
+            "amount": "500.00"
+          },
+          {
+            "method": "cash",
+            "currency": "USD",
+            "amount": "15.00",
+            "rate": "36.624300"
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "1",
+            "gross": "1000.00",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "0.00",
+            "taxableBase": "1000.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "1000.00",
+                "amount": "150.00"
+              }
+            ],
+            "taxTotal": "150.00",
+            "total": "1150.00"
+          }
+        ],
+        "gross": "1000.00",
+        "lineDiscountTotal": "0.00",
+        "saleDiscount": "0.00",
+        "discountTotal": "0.00",
+        "subtotal": "1000.00",
+        "taxableBase": "1000.00",
+        "exemptTotal": "0.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "1000.00",
+            "amount": "150.00"
+          }
+        ],
+        "taxTotal": "150.00",
+        "total": "1150.00",
+        "cashRounding": "0.00",
+        "cashTotal": "1150.00",
+        "tip": "0.00",
+        "due": "1150.00",
+        "paid": "1049.36",
+        "change": "0.00",
+        "balance": "100.64"
+      }
+    }
+  ]
+}

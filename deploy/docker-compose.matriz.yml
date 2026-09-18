@@ -1,0 +1,24 @@
+# Perfil **casa matriz**: cherryERP y cherryPOS conviviendo en el mismo servidor.
+#
+# Q-01 lo fijó: el ERP no vive en la nube. Se instala en casa matriz y las
+# sucursales lo alcanzan por VPN, con tráfico asíncrono que nunca bloquea una
+# venta.
+#
+# Este archivo extiende el de sucursal: el POS es idéntico en los dos perfiles,
+# y lo único que cambia es qué más corre al lado.
+include:
+  - docker-compose.sucursal.yml
+
+services:
+  # El ERP se despliega desde su propio repositorio (`cherryB`). Se declara aquí
+  # para que la red y el orden de arranque queden documentados en un solo lugar.
+  erp:
+    image: ${ERP_IMAGE:-cherryb:latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+    profiles:
+      - erp

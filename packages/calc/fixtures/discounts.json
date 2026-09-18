@@ -1,0 +1,386 @@
+{
+  "suite": "descuentos",
+  "cases": [
+    {
+      "name": "descuento-porcentual-linea",
+      "description": "10 % sobre 999.99 da 99.999, que redondea a 100.00 (medio hacia arriba). El impuesto se calcula sobre la base ya rebajada.",
+      "input": {
+        "config": {
+          "currency": "NIO"
+        },
+        "lines": [
+          {
+            "id": "1",
+            "qty": "1",
+            "unitPrice": "999.99",
+            "discount": {
+              "type": "percent",
+              "value": "10"
+            },
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "1",
+            "gross": "999.99",
+            "lineDiscount": "100.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "100.00",
+            "taxableBase": "899.99",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "899.99",
+                "amount": "135.00"
+              }
+            ],
+            "taxTotal": "135.00",
+            "total": "1034.99"
+          }
+        ],
+        "gross": "999.99",
+        "lineDiscountTotal": "100.00",
+        "saleDiscount": "0.00",
+        "discountTotal": "100.00",
+        "subtotal": "899.99",
+        "taxableBase": "899.99",
+        "exemptTotal": "0.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "899.99",
+            "amount": "135.00"
+          }
+        ],
+        "taxTotal": "135.00",
+        "total": "1034.99",
+        "cashRounding": "0.00",
+        "cashTotal": "1034.99",
+        "tip": "0.00",
+        "due": "1034.99",
+        "paid": "0.00",
+        "change": "0.00",
+        "balance": "1034.99"
+      }
+    },
+    {
+      "name": "descuento-monto-fijo",
+      "description": "Descuento por monto, no por porcentaje. 424.50 × 15 % = 63.675, que redondea a 63.68.",
+      "input": {
+        "config": {
+          "currency": "NIO"
+        },
+        "lines": [
+          {
+            "id": "1",
+            "qty": "1",
+            "unitPrice": "500.00",
+            "discount": {
+              "type": "amount",
+              "value": "75.50"
+            },
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "1",
+            "gross": "500.00",
+            "lineDiscount": "75.50",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "75.50",
+            "taxableBase": "424.50",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "424.50",
+                "amount": "63.68"
+              }
+            ],
+            "taxTotal": "63.68",
+            "total": "488.18"
+          }
+        ],
+        "gross": "500.00",
+        "lineDiscountTotal": "75.50",
+        "saleDiscount": "0.00",
+        "discountTotal": "75.50",
+        "subtotal": "424.50",
+        "taxableBase": "424.50",
+        "exemptTotal": "0.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "424.50",
+            "amount": "63.68"
+          }
+        ],
+        "taxTotal": "63.68",
+        "total": "488.18",
+        "cashRounding": "0.00",
+        "cashTotal": "488.18",
+        "tip": "0.00",
+        "due": "488.18",
+        "paid": "0.00",
+        "change": "0.00",
+        "balance": "488.18"
+      }
+    },
+    {
+      "name": "descuento-linea-mas-venta",
+      "description": "Descuento de venta encima de un descuento de línea. El 5 % se calcula sobre 239.99 (ya neto de línea) y se reparte por resto mayor: 4.50 / 2.50 / 5.00 suman exactamente 12.00, sin centavo perdido.",
+      "input": {
+        "config": {
+          "currency": "NIO"
+        },
+        "saleDiscount": {
+          "type": "percent",
+          "value": "5"
+        },
+        "lines": [
+          {
+            "id": "a",
+            "qty": "1",
+            "unitPrice": "100.00",
+            "discount": {
+              "type": "percent",
+              "value": "10"
+            },
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          },
+          {
+            "id": "b",
+            "qty": "1",
+            "unitPrice": "50.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          },
+          {
+            "id": "c",
+            "qty": "3",
+            "unitPrice": "33.33",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "a",
+            "gross": "100.00",
+            "lineDiscount": "10.00",
+            "saleDiscountShare": "4.50",
+            "discountTotal": "14.50",
+            "taxableBase": "85.50",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "85.50",
+                "amount": "12.83"
+              }
+            ],
+            "taxTotal": "12.83",
+            "total": "98.33"
+          },
+          {
+            "id": "b",
+            "gross": "50.00",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "2.50",
+            "discountTotal": "2.50",
+            "taxableBase": "47.50",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "47.50",
+                "amount": "7.13"
+              }
+            ],
+            "taxTotal": "7.13",
+            "total": "54.63"
+          },
+          {
+            "id": "c",
+            "gross": "99.99",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "5.00",
+            "discountTotal": "5.00",
+            "taxableBase": "94.99",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "94.99",
+                "amount": "14.25"
+              }
+            ],
+            "taxTotal": "14.25",
+            "total": "109.24"
+          }
+        ],
+        "gross": "249.99",
+        "lineDiscountTotal": "10.00",
+        "saleDiscount": "12.00",
+        "discountTotal": "22.00",
+        "subtotal": "227.99",
+        "taxableBase": "227.99",
+        "exemptTotal": "0.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "227.99",
+            "amount": "34.21"
+          }
+        ],
+        "taxTotal": "34.21",
+        "total": "262.20",
+        "cashRounding": "0.00",
+        "cashTotal": "262.20",
+        "tip": "0.00",
+        "due": "262.20",
+        "paid": "0.00",
+        "change": "0.00",
+        "balance": "262.20"
+      }
+    },
+    {
+      "name": "descuento-venta-con-iva-incluido",
+      "description": "Descuento de venta cuando el precio ya trae el impuesto: primero se rebaja, después se extrae. Al revés el IVA declarado sería el del precio de lista, no el del precio cobrado.",
+      "input": {
+        "config": {
+          "currency": "NIO"
+        },
+        "saleDiscount": {
+          "type": "amount",
+          "value": "10.00"
+        },
+        "lines": [
+          {
+            "id": "a",
+            "qty": "1",
+            "unitPrice": "115.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15",
+                "base": "gross"
+              }
+            ]
+          },
+          {
+            "id": "b",
+            "qty": "1",
+            "unitPrice": "57.50",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15",
+                "base": "gross"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "a",
+            "gross": "115.00",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "6.67",
+            "discountTotal": "6.67",
+            "taxableBase": "94.20",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "94.20",
+                "amount": "14.13"
+              }
+            ],
+            "taxTotal": "14.13",
+            "total": "108.33"
+          },
+          {
+            "id": "b",
+            "gross": "57.50",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "3.33",
+            "discountTotal": "3.33",
+            "taxableBase": "47.10",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "47.10",
+                "amount": "7.07"
+              }
+            ],
+            "taxTotal": "7.07",
+            "total": "54.17"
+          }
+        ],
+        "gross": "172.50",
+        "lineDiscountTotal": "0.00",
+        "saleDiscount": "10.00",
+        "discountTotal": "10.00",
+        "subtotal": "141.30",
+        "taxableBase": "141.30",
+        "exemptTotal": "0.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "141.30",
+            "amount": "21.20"
+          }
+        ],
+        "taxTotal": "21.20",
+        "total": "162.50",
+        "cashRounding": "0.00",
+        "cashTotal": "162.50",
+        "tip": "0.00",
+        "due": "162.50",
+        "paid": "0.00",
+        "change": "0.00",
+        "balance": "162.50"
+      }
+    }
+  ]
+}

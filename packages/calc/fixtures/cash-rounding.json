@@ -1,0 +1,243 @@
+{
+  "suite": "redondeo-de-efectivo",
+  "cases": [
+    {
+      "name": "redondeo-efectivo-arriba",
+      "description": "Total 100.63 con múltiplo de 0.25: el resto de 0.13 pasa la mitad y sube a 100.75. El total fiscal (100.63) no se toca — el redondeo es del cobro, no del documento.",
+      "input": {
+        "config": {
+          "currency": "NIO",
+          "cashRounding": {
+            "mode": "nearest",
+            "increment": "0.25"
+          }
+        },
+        "lines": [
+          {
+            "id": "1",
+            "qty": "1",
+            "unitPrice": "87.50",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          }
+        ],
+        "payments": [
+          {
+            "method": "cash",
+            "amount": "100.75"
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "1",
+            "gross": "87.50",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "0.00",
+            "taxableBase": "87.50",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "87.50",
+                "amount": "13.13"
+              }
+            ],
+            "taxTotal": "13.13",
+            "total": "100.63"
+          }
+        ],
+        "gross": "87.50",
+        "lineDiscountTotal": "0.00",
+        "saleDiscount": "0.00",
+        "discountTotal": "0.00",
+        "subtotal": "87.50",
+        "taxableBase": "87.50",
+        "exemptTotal": "0.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "87.50",
+            "amount": "13.13"
+          }
+        ],
+        "taxTotal": "13.13",
+        "total": "100.63",
+        "cashRounding": "0.12",
+        "cashTotal": "100.75",
+        "tip": "0.00",
+        "due": "100.75",
+        "paid": "100.75",
+        "change": "0.00",
+        "balance": "0.00"
+      }
+    },
+    {
+      "name": "redondeo-efectivo-abajo",
+      "description": "Total 100.05: el resto de 0.05 no llega a la mitad de 0.25 y baja a 100.00. El cliente paga con 200 y el vuelto sale del total redondeado.",
+      "input": {
+        "config": {
+          "currency": "NIO",
+          "cashRounding": {
+            "mode": "nearest",
+            "increment": "0.25"
+          }
+        },
+        "lines": [
+          {
+            "id": "1",
+            "qty": "1",
+            "unitPrice": "87.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          }
+        ],
+        "payments": [
+          {
+            "method": "cash",
+            "amount": "200.00"
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "1",
+            "gross": "87.00",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "0.00",
+            "taxableBase": "87.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "87.00",
+                "amount": "13.05"
+              }
+            ],
+            "taxTotal": "13.05",
+            "total": "100.05"
+          }
+        ],
+        "gross": "87.00",
+        "lineDiscountTotal": "0.00",
+        "saleDiscount": "0.00",
+        "discountTotal": "0.00",
+        "subtotal": "87.00",
+        "taxableBase": "87.00",
+        "exemptTotal": "0.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "87.00",
+            "amount": "13.05"
+          }
+        ],
+        "taxTotal": "13.05",
+        "total": "100.05",
+        "cashRounding": "-0.05",
+        "cashTotal": "100.00",
+        "tip": "0.00",
+        "due": "100.00",
+        "paid": "200.00",
+        "change": "100.00",
+        "balance": "0.00"
+      }
+    },
+    {
+      "name": "redondeo-no-aplica-con-tarjeta",
+      "description": "B-09: el efectivo redondea, los demás medios no. Con una tarjeta en el ticket se cobra el importe exacto, aunque el redondeo esté configurado.",
+      "input": {
+        "config": {
+          "currency": "NIO",
+          "cashRounding": {
+            "mode": "nearest",
+            "increment": "0.25"
+          }
+        },
+        "lines": [
+          {
+            "id": "1",
+            "qty": "1",
+            "unitPrice": "87.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          }
+        ],
+        "payments": [
+          {
+            "method": "cash",
+            "amount": "50.00"
+          },
+          {
+            "method": "card",
+            "amount": "50.05"
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "1",
+            "gross": "87.00",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "0.00",
+            "taxableBase": "87.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "87.00",
+                "amount": "13.05"
+              }
+            ],
+            "taxTotal": "13.05",
+            "total": "100.05"
+          }
+        ],
+        "gross": "87.00",
+        "lineDiscountTotal": "0.00",
+        "saleDiscount": "0.00",
+        "discountTotal": "0.00",
+        "subtotal": "87.00",
+        "taxableBase": "87.00",
+        "exemptTotal": "0.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "87.00",
+            "amount": "13.05"
+          }
+        ],
+        "taxTotal": "13.05",
+        "total": "100.05",
+        "cashRounding": "-0.05",
+        "cashTotal": "100.00",
+        "tip": "0.00",
+        "due": "100.05",
+        "paid": "100.05",
+        "change": "0.00",
+        "balance": "0.00"
+      }
+    }
+  ]
+}

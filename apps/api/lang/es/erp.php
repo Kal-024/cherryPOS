@@ -1,0 +1,25 @@
+<?php
+
+return [
+    'tax_difference_title' => 'Diferencia de impuesto con el ERP',
+    'tax_difference_body' => 'El ERP calculó :difference de diferencia sobre el impuesto de este ticket. Si se repite, los dos motores de cálculo están divergiendo.',
+    'exception_title' => 'Ticket rechazado por el ERP',
+    'exception_body' => 'El envío falló con el código :code. La venta está cobrada; el documento fiscal no se emitió.',
+    'outbox_empty' => 'No hay envíos pendientes ni excepciones.',
+    'outbox_retrieved' => 'Bandeja de envíos consultada.',
+    'entry_retrieved' => 'Envío consultado.',
+    'entry_not_found' => 'Envío no encontrado.',
+    'entry_requeued' => 'Envío devuelto a la cola.',
+    'entry_resolved' => 'Excepción cerrada a mano.',
+    'only_exceptions_retry' => 'Solo se reintenta lo que quedó en excepción.',
+    'only_exceptions_resolve' => 'Solo se cierra a mano lo que quedó en excepción.',
+    'status_retrieved' => 'Estado de la integración consultado.',
+    'not_configured' => 'No hay ERP configurado: el POS opera solo.',
+    'settings_pulled' => 'Configuración del ERP aplicada.',
+    'pull_failed' => 'El ERP no contestó: :error',
+    'masters_pulled' => 'Catálogo y clientes leídos del ERP.',
+    'reconciliation_retrieved' => 'Bandeja de conciliación consultada.',
+    'reconciliation_empty' => 'No hay nada pendiente de conciliar.',
+    'reconciliation_not_found' => 'Registro de conciliación no encontrado.',
+    'reconciliation_resolved' => 'Conciliación cerrada.',
+];

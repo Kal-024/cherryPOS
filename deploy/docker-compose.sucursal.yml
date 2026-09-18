@@ -1,0 +1,78 @@
+# Perfil **sucursal**: solo cherryPOS.
+#
+# El enlace con casa matriz es asíncrono y no bloqueante: si la VPN cae, la
+# sucursal sigue vendiendo y sincroniza después (P4).
+services:
+  # El directorio de archivo de WAL nace del volumen, y un volumen vacío se crea
+  # **propiedad de root**. PostgreSQL archiva como el usuario `postgres`, así
+  # que sin este paso `archive_command` falla en silencio: `archive_mode` sigue
+  # encendido, los segmentos se acumulan porque nadie los archiva, y el disco se
+  # llena hasta que la base deja de aceptar escrituras. Una caída provocada por
+  # el propio mecanismo de respaldo, y descubierta el día que hace falta
+  # restaurar.
+  wal-init:
+    image: postgres:17-alpine
+    user: root
+    command: sh -c "mkdir -p /var/lib/postgresql/wal && chown postgres:postgres /var/lib/postgresql/wal && chmod 700 /var/lib/postgresql/wal"
+    volumes:
+      - wal-archive:/var/lib/postgresql/wal
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-cherrypos}
+      POSTGRES_USER: ${DB_USERNAME:-cherrypos}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?hace falta DB_PASSWORD}
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # Archivado continuo de WAL: con solo el volcado diario se pierde hasta un
+      # día entero de ventas (docs/OPERACION.md).
+      - wal-archive:/var/lib/postgresql/wal
+    command: >
+      postgres
+        -c wal_level=replica
+        -c archive_mode=on
+        -c archive_command='test ! -f /var/lib/postgresql/wal/%f && cp %p /var/lib/postgresql/wal/%f'
+    depends_on:
+      wal-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-cherrypos}"]
+      interval: 10s
+      retries: 10
+
+  api:
+    # Etiqueta **y** contexto de construcción: en una instalación de cliente la
+    # imagen llega etiquetada desde el registro y `update.sh` la baja; en una
+    # máquina sin registro se construye acá mismo. Sin la etiqueta no habría
+    # forma de volver a la versión anterior, que es requisito de toda
+    # actualización (docs/OPERACION.md §4).
+    image: ${POS_API_IMAGE:-cherrypos/api}:${IMAGE_TAG:-latest}
+    build:
+      context: ../apps/api
+    restart: unless-stopped
+    env_file: ../apps/api/.env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - storage:/var/www/html/storage
+
+  web:
+    image: ${POS_WEB_IMAGE:-cherrypos/web}:${IMAGE_TAG:-latest}
+    build:
+      context: ..
+      dockerfile: apps/pos/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+
+volumes:
+  db-data:
+  wal-archive:
+  storage:

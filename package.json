@@ -1,0 +1,26 @@
+{
+  "name": "cherrypos",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @cherrypos/pos dev",
+    "build": "pnpm --filter @cherrypos/calc build && pnpm --filter @cherrypos/pos build",
+    "test": "pnpm -r --filter @cherrypos/calc --filter @cherrypos/pos test",
+    "lint": "pnpm -r --filter @cherrypos/calc --filter @cherrypos/pos lint",
+    "typecheck": "pnpm -r --filter @cherrypos/calc --filter @cherrypos/pos typecheck",
+    "api:test": "cd apps/api && php artisan test",
+    "api:migrate": "cd apps/api && php artisan migrate",
+    "api:serve": "cd apps/api && php artisan serve",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm api:test",
+    "e2e": "playwright test",
+    "e2e:seed": "cd apps/api && php artisan migrate:fresh --seed && php artisan db:seed --class=DemoDataSeeder",
+    "e2e:gate": "pnpm e2e:seed && playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

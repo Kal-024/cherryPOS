@@ -1,0 +1,26 @@
+<?php
+
+return [
+    'kinds_retrieved' => 'Available import types.',
+    'previewed' => 'File read. Review the result before applying.',
+    'applied' => 'Import applied.',
+    'reverted' => 'Import reverted.',
+    'batch_retrieved' => 'Import retrieved.',
+    'batch_not_found' => 'Import not found.',
+    'only_previewed_can_apply' => 'Only a previewed import can be applied.',
+    'only_applied_can_revert' => 'Only an applied import can be reverted.',
+    'empty_file' => 'The file is empty.',
+    'missing_columns' => 'Required columns missing: :columns.',
+    'too_many_rows' => 'The file exceeds :max rows. Consider splitting it.',
+    'unknown_kind' => 'Unknown import type: :kind.',
+    'column_required' => 'The required column ":column" is missing.',
+    'not_a_number' => 'Column ":column" does not hold a valid number.',
+    'unknown_reference' => 'In ":column", ":value" does not exist in the system.',
+    'account_needs_national_id' => 'An account customer needs a national ID: the account is personal.',
+    'product_without_stock' => '":sku" does not track stock.',
+    'lot_required' => '":sku" works with lots: the lot column is required.',
+    'product_already_sold' => '":sku" has already been sold: it was deactivated instead of deleted.',
+    'entity_already_used' => 'It already has movements: it was deactivated instead of deleted.',
+    'initial_stock_comment' => 'Initial stock load',
+    'reverted_stock_comment' => 'Initial stock load reverted',
+];

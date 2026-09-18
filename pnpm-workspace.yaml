@@ -1,0 +1,6 @@
+packages:
+  - 'apps/pos'
+  - 'packages/*'
+
+# `apps/api` queda fuera a propósito: su package.json es el de Laravel y lo
+# gestiona composer/npm por su cuenta, no el workspace.

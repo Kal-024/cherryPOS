@@ -1,0 +1,46 @@
+@import 'tailwindcss';
+@import '@nuxt/ui';
+
+/**
+ * Tema visual (D-23): claro y oscuro, más color primario y secundario
+ * configurables por instalación. Nada más — sin tipografías, sin temas
+ * predefinidos. Es la misma técnica de `cherryF`.
+ *
+ * Los valores llegan de la configuración del negocio y se escriben en estas
+ * variables; el logo y el nombre vienen de la licencia firmada y no son
+ * editables (Q-08).
+ */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+:root {
+  /* Densidad alta: una pantalla de caja muestra información, no aire. */
+  --pos-row-height: 2.25rem;
+  --pos-touch-target: 2.75rem; /* 44 px, mínimo táctil del perfil touch_grid */
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  /* La caja está bajo luz fluorescente o cerca de ventanas: contraste alto. */
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+/* El total se lee desde un metro de distancia. */
+.pos-total {
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Todo importe alineado en columna: los dígitos tabulares evitan el baile. */
+.pos-amount {
+  font-variant-numeric: tabular-nums;
+}

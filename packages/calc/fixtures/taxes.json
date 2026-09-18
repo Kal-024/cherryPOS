@@ -1,0 +1,431 @@
+{
+  "suite": "impuestos",
+  "cases": [
+    {
+      "name": "iva-excluido-basico",
+      "description": "El precio de catálogo no trae impuesto: el IVA se agrega sobre la base.",
+      "input": {
+        "config": {
+          "currency": "NIO"
+        },
+        "lines": [
+          {
+            "id": "1",
+            "qty": "2",
+            "unitPrice": "100.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "1",
+            "gross": "200.00",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "0.00",
+            "taxableBase": "200.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "200.00",
+                "amount": "30.00"
+              }
+            ],
+            "taxTotal": "30.00",
+            "total": "230.00"
+          }
+        ],
+        "gross": "200.00",
+        "lineDiscountTotal": "0.00",
+        "saleDiscount": "0.00",
+        "discountTotal": "0.00",
+        "subtotal": "200.00",
+        "taxableBase": "200.00",
+        "exemptTotal": "0.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "200.00",
+            "amount": "30.00"
+          }
+        ],
+        "taxTotal": "30.00",
+        "total": "230.00",
+        "cashRounding": "0.00",
+        "cashTotal": "230.00",
+        "tip": "0.00",
+        "due": "230.00",
+        "paid": "0.00",
+        "change": "0.00",
+        "balance": "230.00"
+      }
+    },
+    {
+      "name": "iva-incluido-basico",
+      "description": "El precio ya trae el IVA dentro: hay que extraerlo, no agregarlo. 172.50 / 1.15 = 150.00.",
+      "input": {
+        "config": {
+          "currency": "NIO"
+        },
+        "lines": [
+          {
+            "id": "1",
+            "qty": "3",
+            "unitPrice": "57.50",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15",
+                "base": "gross"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "1",
+            "gross": "172.50",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "0.00",
+            "taxableBase": "150.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "150.00",
+                "amount": "22.50"
+              }
+            ],
+            "taxTotal": "22.50",
+            "total": "172.50"
+          }
+        ],
+        "gross": "172.50",
+        "lineDiscountTotal": "0.00",
+        "saleDiscount": "0.00",
+        "discountTotal": "0.00",
+        "subtotal": "150.00",
+        "taxableBase": "150.00",
+        "exemptTotal": "0.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "150.00",
+            "amount": "22.50"
+          }
+        ],
+        "taxTotal": "22.50",
+        "total": "172.50",
+        "cashRounding": "0.00",
+        "cashTotal": "172.50",
+        "tip": "0.00",
+        "due": "172.50",
+        "paid": "0.00",
+        "change": "0.00",
+        "balance": "172.50"
+      }
+    },
+    {
+      "name": "producto-exento",
+      "description": "Farmacia: el medicamento está exento de IVA en Nicaragua y convive en el mismo ticket con un producto gravado (Q-07).",
+      "input": {
+        "config": {
+          "currency": "NIO"
+        },
+        "lines": [
+          {
+            "id": "med",
+            "qty": "2",
+            "unitPrice": "125.00",
+            "exempt": true,
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          },
+          {
+            "id": "sha",
+            "qty": "1",
+            "unitPrice": "80.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "med",
+            "gross": "250.00",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "0.00",
+            "taxableBase": "250.00",
+            "taxes": [],
+            "taxTotal": "0.00",
+            "total": "250.00"
+          },
+          {
+            "id": "sha",
+            "gross": "80.00",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "0.00",
+            "taxableBase": "80.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "80.00",
+                "amount": "12.00"
+              }
+            ],
+            "taxTotal": "12.00",
+            "total": "92.00"
+          }
+        ],
+        "gross": "330.00",
+        "lineDiscountTotal": "0.00",
+        "saleDiscount": "0.00",
+        "discountTotal": "0.00",
+        "subtotal": "330.00",
+        "taxableBase": "80.00",
+        "exemptTotal": "250.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "80.00",
+            "amount": "12.00"
+          }
+        ],
+        "taxTotal": "12.00",
+        "total": "342.00",
+        "cashRounding": "0.00",
+        "cashTotal": "342.00",
+        "tip": "0.00",
+        "due": "342.00",
+        "paid": "0.00",
+        "change": "0.00",
+        "balance": "342.00"
+      }
+    },
+    {
+      "name": "cliente-exonerado",
+      "description": "Organismo exonerado: el producto está gravado, el cliente no paga impuesto (Q-07).",
+      "input": {
+        "config": {
+          "currency": "NIO"
+        },
+        "customer": {
+          "taxExempt": true
+        },
+        "lines": [
+          {
+            "id": "1",
+            "qty": "1",
+            "unitPrice": "1000.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "1",
+            "gross": "1000.00",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "0.00",
+            "taxableBase": "1000.00",
+            "taxes": [],
+            "taxTotal": "0.00",
+            "total": "1000.00"
+          }
+        ],
+        "gross": "1000.00",
+        "lineDiscountTotal": "0.00",
+        "saleDiscount": "0.00",
+        "discountTotal": "0.00",
+        "subtotal": "1000.00",
+        "taxableBase": "0.00",
+        "exemptTotal": "1000.00",
+        "taxes": [],
+        "taxTotal": "0.00",
+        "total": "1000.00",
+        "cashRounding": "0.00",
+        "cashTotal": "1000.00",
+        "tip": "0.00",
+        "due": "1000.00",
+        "paid": "0.00",
+        "change": "0.00",
+        "balance": "1000.00"
+      }
+    },
+    {
+      "name": "regimen-cuota-fija",
+      "description": "El negocio no traslada IVA: la bandera apaga el impuesto en todo el ticket, no producto por producto (Q-07).",
+      "input": {
+        "config": {
+          "currency": "NIO",
+          "fixedQuotaRegime": true
+        },
+        "lines": [
+          {
+            "id": "1",
+            "qty": "4",
+            "unitPrice": "25.50",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "1",
+            "gross": "102.00",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "0.00",
+            "taxableBase": "102.00",
+            "taxes": [],
+            "taxTotal": "0.00",
+            "total": "102.00"
+          }
+        ],
+        "gross": "102.00",
+        "lineDiscountTotal": "0.00",
+        "saleDiscount": "0.00",
+        "discountTotal": "0.00",
+        "subtotal": "102.00",
+        "taxableBase": "102.00",
+        "exemptTotal": "0.00",
+        "taxes": [],
+        "taxTotal": "0.00",
+        "total": "102.00",
+        "cashRounding": "0.00",
+        "cashTotal": "102.00",
+        "tip": "0.00",
+        "due": "102.00",
+        "paid": "0.00",
+        "change": "0.00",
+        "balance": "102.00"
+      }
+    },
+    {
+      "name": "multi-impuesto-incluido",
+      "description": "Dos tributos dentro del mismo precio. Se extrae una sola vez contra la suma de tasas y se reparte: extraer uno por uno dejaría un residuo sin dueño.",
+      "input": {
+        "config": {
+          "currency": "NIO"
+        },
+        "lines": [
+          {
+            "id": "1",
+            "qty": "1",
+            "unitPrice": "118.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15",
+                "base": "gross"
+              },
+              {
+                "code": "ISC",
+                "rate": "3",
+                "base": "gross"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "1",
+            "gross": "118.00",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "0.00",
+            "taxableBase": "100.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "100.00",
+                "amount": "15.00"
+              },
+              {
+                "code": "ISC",
+                "rate": "3.0000",
+                "base": "100.00",
+                "amount": "3.00"
+              }
+            ],
+            "taxTotal": "18.00",
+            "total": "118.00"
+          }
+        ],
+        "gross": "118.00",
+        "lineDiscountTotal": "0.00",
+        "saleDiscount": "0.00",
+        "discountTotal": "0.00",
+        "subtotal": "100.00",
+        "taxableBase": "100.00",
+        "exemptTotal": "0.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "100.00",
+            "amount": "15.00"
+          },
+          {
+            "code": "ISC",
+            "rate": "3.0000",
+            "base": "100.00",
+            "amount": "3.00"
+          }
+        ],
+        "taxTotal": "18.00",
+        "total": "118.00",
+        "cashRounding": "0.00",
+        "cashTotal": "118.00",
+        "tip": "0.00",
+        "due": "118.00",
+        "paid": "0.00",
+        "change": "0.00",
+        "balance": "118.00"
+      }
+    }
+  ]
+}

@@ -1,0 +1,310 @@
+{
+  "suite": "propina",
+  "cases": [
+    {
+      "name": "propina-sobre-iva-incluido",
+      "description": "La propina se cobra pero no se factura: entra en lo que hay que cobrar y no toca la base gravada, el impuesto ni el total fiscal (G-16). El documento sigue diciendo 345.00 aunque el cliente entregue 379.50.",
+      "input": {
+        "config": {
+          "currency": "NIO"
+        },
+        "lines": [
+          {
+            "id": "1",
+            "qty": "1",
+            "unitPrice": "345.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15",
+                "base": "gross"
+              }
+            ]
+          }
+        ],
+        "tip": "34.50",
+        "payments": [
+          {
+            "method": "cash",
+            "amount": "400.00"
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "1",
+            "gross": "345.00",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "0.00",
+            "taxableBase": "300.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "300.00",
+                "amount": "45.00"
+              }
+            ],
+            "taxTotal": "45.00",
+            "total": "345.00"
+          }
+        ],
+        "gross": "345.00",
+        "lineDiscountTotal": "0.00",
+        "saleDiscount": "0.00",
+        "discountTotal": "0.00",
+        "subtotal": "300.00",
+        "taxableBase": "300.00",
+        "exemptTotal": "0.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "300.00",
+            "amount": "45.00"
+          }
+        ],
+        "taxTotal": "45.00",
+        "total": "345.00",
+        "cashRounding": "0.00",
+        "cashTotal": "345.00",
+        "tip": "34.50",
+        "due": "379.50",
+        "paid": "400.00",
+        "change": "20.50",
+        "balance": "0.00"
+      }
+    },
+    {
+      "name": "propina-no-se-redondea",
+      "description": "El redondeo de efectivo es del documento, no del cobro completo: se aplica al total fiscal (100.63 sube a 100.75) y la propina se suma después, entera. Redondear también la propina movería un importe fiscal por un motivo que no lo es.",
+      "input": {
+        "config": {
+          "currency": "NIO",
+          "cashRounding": {
+            "mode": "nearest",
+            "increment": "0.25"
+          }
+        },
+        "lines": [
+          {
+            "id": "1",
+            "qty": "1",
+            "unitPrice": "87.50",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          }
+        ],
+        "tip": "20.00",
+        "payments": [
+          {
+            "method": "cash",
+            "amount": "120.75"
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "1",
+            "gross": "87.50",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "0.00",
+            "taxableBase": "87.50",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "87.50",
+                "amount": "13.13"
+              }
+            ],
+            "taxTotal": "13.13",
+            "total": "100.63"
+          }
+        ],
+        "gross": "87.50",
+        "lineDiscountTotal": "0.00",
+        "saleDiscount": "0.00",
+        "discountTotal": "0.00",
+        "subtotal": "87.50",
+        "taxableBase": "87.50",
+        "exemptTotal": "0.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "87.50",
+            "amount": "13.13"
+          }
+        ],
+        "taxTotal": "13.13",
+        "total": "100.63",
+        "cashRounding": "0.12",
+        "cashTotal": "100.75",
+        "tip": "20.00",
+        "due": "120.75",
+        "paid": "120.75",
+        "change": "0.00",
+        "balance": "0.00"
+      }
+    },
+    {
+      "name": "propina-con-cobro-parcial",
+      "description": "Con la cuenta a medio pagar, el saldo incluye la propina: el mesero que cobra 1000 sobre 1265 sigue viendo 265 pendientes, no 150. Dejar la propina fuera del saldo daría por saldada una cuenta que no lo está.",
+      "input": {
+        "config": {
+          "currency": "NIO"
+        },
+        "lines": [
+          {
+            "id": "1",
+            "qty": "2",
+            "unitPrice": "500.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          }
+        ],
+        "tip": "115.00",
+        "payments": [
+          {
+            "method": "cash",
+            "amount": "1000.00"
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "1",
+            "gross": "1000.00",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "0.00",
+            "taxableBase": "1000.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "1000.00",
+                "amount": "150.00"
+              }
+            ],
+            "taxTotal": "150.00",
+            "total": "1150.00"
+          }
+        ],
+        "gross": "1000.00",
+        "lineDiscountTotal": "0.00",
+        "saleDiscount": "0.00",
+        "discountTotal": "0.00",
+        "subtotal": "1000.00",
+        "taxableBase": "1000.00",
+        "exemptTotal": "0.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "1000.00",
+            "amount": "150.00"
+          }
+        ],
+        "taxTotal": "150.00",
+        "total": "1150.00",
+        "cashRounding": "0.00",
+        "cashTotal": "1150.00",
+        "tip": "115.00",
+        "due": "1265.00",
+        "paid": "1000.00",
+        "change": "0.00",
+        "balance": "265.00"
+      }
+    },
+    {
+      "name": "propina-en-devolucion",
+      "description": "Anulada la cuenta, la propina vuelve con ella: llega en negativo y el importe a entregar es 125.00, no 115.00. El motor no le impone signo — lo impone quien arma la devolución, igual que con las líneas.",
+      "input": {
+        "config": {
+          "currency": "NIO"
+        },
+        "lines": [
+          {
+            "id": "1",
+            "qty": "-1",
+            "unitPrice": "100.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15"
+              }
+            ]
+          }
+        ],
+        "tip": "-10.00",
+        "payments": [
+          {
+            "method": "cash",
+            "amount": "-125.00"
+          }
+        ]
+      },
+      "expected": {
+        "lines": [
+          {
+            "id": "1",
+            "gross": "-100.00",
+            "lineDiscount": "0.00",
+            "saleDiscountShare": "0.00",
+            "discountTotal": "0.00",
+            "taxableBase": "-100.00",
+            "taxes": [
+              {
+                "code": "IVA",
+                "rate": "15.0000",
+                "base": "-100.00",
+                "amount": "-15.00"
+              }
+            ],
+            "taxTotal": "-15.00",
+            "total": "-115.00"
+          }
+        ],
+        "gross": "-100.00",
+        "lineDiscountTotal": "0.00",
+        "saleDiscount": "0.00",
+        "discountTotal": "0.00",
+        "subtotal": "-100.00",
+        "taxableBase": "-100.00",
+        "exemptTotal": "0.00",
+        "taxes": [
+          {
+            "code": "IVA",
+            "rate": "15.0000",
+            "base": "-100.00",
+            "amount": "-15.00"
+          }
+        ],
+        "taxTotal": "-15.00",
+        "total": "-115.00",
+        "cashRounding": "0.00",
+        "cashTotal": "-115.00",
+        "tip": "-10.00",
+        "due": "-125.00",
+        "paid": "-125.00",
+        "change": "0.00",
+        "balance": "0.00"
+      }
+    }
+  ]
+}

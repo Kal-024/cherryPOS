@@ -1,0 +1,26 @@
+<?php
+
+return [
+    'kinds_retrieved' => 'Tipos de importación disponibles.',
+    'previewed' => 'Archivo leído. Revisá el resultado antes de aplicar.',
+    'applied' => 'Importación aplicada.',
+    'reverted' => 'Importación revertida.',
+    'batch_retrieved' => 'Importación consultada.',
+    'batch_not_found' => 'Importación no encontrada.',
+    'only_previewed_can_apply' => 'Solo se puede aplicar una importación previsualizada.',
+    'only_applied_can_revert' => 'Solo se puede revertir una importación aplicada.',
+    'empty_file' => 'El archivo está vacío.',
+    'missing_columns' => 'Faltan columnas obligatorias: :columns.',
+    'too_many_rows' => 'El archivo supera las :max filas. Convendría partirlo.',
+    'unknown_kind' => 'Tipo de importación desconocido: :kind.',
+    'column_required' => 'Falta la columna obligatoria ":column".',
+    'not_a_number' => 'La columna ":column" no tiene un número válido.',
+    'unknown_reference' => 'En ":column", ":value" no existe en el sistema.',
+    'account_needs_national_id' => 'Un cliente con cuenta necesita cédula: la cuenta es personal.',
+    'product_without_stock' => '":sku" no maneja existencias.',
+    'lot_required' => '":sku" trabaja con lotes: la columna lote es obligatoria.',
+    'product_already_sold' => '":sku" ya se vendió: se dio de baja en vez de borrarse.',
+    'entity_already_used' => 'Ya tiene movimientos: se dio de baja en vez de borrarse.',
+    'initial_stock_comment' => 'Carga inicial de existencias',
+    'reverted_stock_comment' => 'Reversión de carga inicial',
+];

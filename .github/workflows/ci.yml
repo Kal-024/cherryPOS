@@ -1,0 +1,233 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# El objetivo de este flujo es uno solo y está escrito en el plan: **el CI falla
+# si los dos motores de cálculo difieren en un centavo**. Todo lo demás
+# —lint, typecheck, pruebas de esquema— es higiene alrededor de eso.
+jobs:
+  frontend:
+    name: Frontend y motor de cálculo (TypeScript)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  api:
+    name: API y motor de cálculo (PHP)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: cherrypos_testing
+          POSTGRES_USER: cherrypos
+          POSTGRES_PASSWORD: cherrypos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cherrypos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          # BCMath no es opcional: el motor de cálculo lo usa para no tocar coma
+          # flotante en ningún punto.
+          extensions: bcmath, pdo_pgsql, intl, mbstring
+          coverage: none
+
+      - name: Instalar dependencias
+        working-directory: apps/api
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Preparar entorno
+        working-directory: apps/api
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Formato (Pint)
+        working-directory: apps/api
+        run: ./vendor/bin/pint --test
+
+      - name: Pruebas
+        working-directory: apps/api
+        run: php artisan test
+
+  simulacro:
+    name: Simulacro de restauración (Operación)
+    runs-on: ubuntu-latest
+
+    # El único nivel de pruebas del plan que no vivía en ningún lado. Un respaldo
+    # no verificado no cuenta como respaldo, y verificarlo una vez al mes a mano
+    # significa descubrir el problema el mes que nadie lo hizo.
+    #
+    # El servidor se levanta **con archivado de WAL encendido**, que es como
+    # corre en un local: así el guion comprueba de verdad que el archivado
+    # funciona, en vez de dar por buena una configuración que falla en silencio.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: bcmath, pdo_pgsql, intl, mbstring
+          coverage: none
+
+      - name: Servidor con archivado de WAL
+        run: |
+          docker volume create wal-archive
+          docker run -d --name pos-db \
+            -e POSTGRES_DB=cherrypos -e POSTGRES_USER=cherrypos -e POSTGRES_PASSWORD=cherrypos \
+            -e TZ=UTC -e PGTZ=UTC -p 5432:5432 \
+            -v wal-archive:/var/lib/postgresql/wal \
+            postgres:17-alpine \
+            postgres -c wal_level=replica -c archive_mode=on \
+              -c "archive_command=test ! -f /var/lib/postgresql/wal/%f && cp %p /var/lib/postgresql/wal/%f"
+
+          # El mismo paso que hace el servicio `wal-init` del compose: el volumen
+          # nace de root y PostgreSQL archiva como postgres.
+          docker exec -u root pos-db sh -c 'mkdir -p /var/lib/postgresql/wal && chown postgres:postgres /var/lib/postgresql/wal'
+
+          for _ in $(seq 1 30); do
+            docker exec pos-db pg_isready -U cherrypos && break
+            sleep 2
+          done
+
+      - name: Instalar dependencias de la API
+        working-directory: apps/api
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Instalación con datos
+        working-directory: apps/api
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          php artisan migrate --force
+          php artisan db:seed --force
+          php artisan db:seed --class=DemoDataSeeder --force
+
+      - name: Respaldar y ensayar la restauración
+        env:
+          BACKUP_PASSPHRASE: ensayo-de-integracion
+          DB_USERNAME: cherrypos
+          DB_DATABASE: cherrypos
+        run: |
+          # Los guiones hablan con `compose`; acá el servidor es un contenedor
+          # suelto y la aplicación no corre, así que se traduce lo uno y se
+          # simula lo otro con un tar vacío.
+          cat > /tmp/compose-ci.sh <<'WRAPPER'
+          #!/bin/sh
+          shift 2
+          service="$1"; shift
+          case "$service" in
+            db) exec docker exec -i pos-db "$@" ;;
+            api) exec tar -cf - -T /dev/null ;;
+            *) echo "sin servicio $service" >&2; exit 1 ;;
+          esac
+          WRAPPER
+          chmod +x /tmp/compose-ci.sh
+
+          export COMPOSE=/tmp/compose-ci.sh
+          ./deploy/scripts/backup.sh /tmp/copias
+          ./deploy/scripts/drill.sh /tmp/copias/cherrypos-*.tar.xz.enc
+
+  compuerta:
+    name: Compuerta de F1-A (Playwright)
+    runs-on: ubuntu-latest
+
+    # El guion del §8 del plan, de punta a punta. Es lo único que prueba el
+    # cableado del navegador —foco, guardias de ruta, layouts, modo degradado—
+    # que ninguna prueba unitaria ve: los dos fallos que encontró al escribirse
+    # (el layout que no dibujaba la página y el turno que no se podía cerrar)
+    # pasaban por delante de 83 pruebas verdes.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: cherrypos
+          POSTGRES_USER: cherrypos
+          POSTGRES_PASSWORD: cherrypos
+          TZ: UTC
+          PGTZ: UTC
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cherrypos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: bcmath, pdo_pgsql, intl, mbstring
+          coverage: none
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Instalar dependencias de la API
+        working-directory: apps/api
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Preparar la instalación de demostración
+        working-directory: apps/api
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          php artisan migrate --force
+          php artisan db:seed --force
+          php artisan db:seed --class=DemoDataSeeder --force
+
+      # Solo Chromium: la caja corre en un navegador del local, no en cinco.
+      - name: Navegador
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Compuerta
+        run: pnpm exec playwright test
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: compuerta-trazas
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7

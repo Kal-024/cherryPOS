@@ -1,0 +1,30 @@
+# Entorno de desarrollo: solo la base de datos y la cola.
+#
+# La API y el frontend se ejecutan fuera del contenedor durante el desarrollo
+# (`php artisan serve` y `pnpm dev`), que es más rápido de iterar. Los perfiles
+# de producción —`docker-compose.matriz.yml` y `docker-compose.sucursal.yml`—
+# sí empaquetan todo.
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: cherrypos-db
+    environment:
+      POSTGRES_DB: cherrypos
+      POSTGRES_USER: cherrypos
+      POSTGRES_PASSWORD: cherrypos
+      # Toda marca de tiempo se guarda con zona horaria; el servidor trabaja en
+      # UTC y la presentación resuelve la zona de la sucursal.
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - "5432:5432"
+    volumes:
+      - cherrypos-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cherrypos -d cherrypos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  cherrypos-db:
