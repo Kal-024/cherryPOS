@@ -149,5 +149,88 @@ export function useDining() {
     }
   }
 
-  return { areas, tables, occupied, loading, saving, elapsedMinutes, refresh, start, stop, openTable, merge, split }
+  /**
+   * Configurar el salón (`dining.manage`).
+   *
+   * Estas cuatro llamadas existían en el servidor desde el primer día y **nadie
+   * las usaba**: el plano se sembraba a mano en la base y el texto de la
+   * pantalla prometía una administración que no estaba construida. Mover una
+   * mesa es editarla — la posición es un campo más, no una operación aparte.
+   */
+  async function createArea(area: { code: string, name: string, sort_order?: number }) {
+    saving.value = true
+
+    try {
+      await apiFetch('/dining/areas', { method: 'POST', body: JSON.stringify(area) })
+      await refresh()
+    } finally {
+      saving.value = false
+    }
+  }
+
+  async function createTable(table: Partial<DiningTable> & { code: string }) {
+    saving.value = true
+
+    try {
+      await apiFetch('/dining/tables', { method: 'POST', body: JSON.stringify(table) })
+      await refresh()
+    } finally {
+      saving.value = false
+    }
+  }
+
+  /**
+   * Guarda los cambios de una mesa, incluida su posición.
+   *
+   * Se llama **al soltar**, no mientras se arrastra: un `PUT` por píxel
+   * recorrido llenaría la bitácora de ruido y la red de viajes inútiles.
+   */
+  async function updateTable(id: string, changes: Partial<DiningTable>) {
+    saving.value = true
+
+    try {
+      await apiFetch(`/dining/tables/${id}`, { method: 'PUT', body: JSON.stringify(changes) })
+    } finally {
+      saving.value = false
+    }
+  }
+
+  /** Baja lógica: las ventas de ayer la referencian y el histórico no se toca. */
+  async function removeTable(id: string) {
+    saving.value = true
+
+    try {
+      await apiFetch(`/dining/tables/${id}`, { method: 'DELETE' })
+      await refresh()
+    } finally {
+      saving.value = false
+    }
+  }
+
+  /** Mueve la mesa en memoria, para que el arrastre se vea sin esperar al servidor. */
+  function placeLocally(id: string, x: number, y: number) {
+    tables.value = tables.value.map(
+      (table) => (table.id === id ? { ...table, pos_x: x, pos_y: y } : table)
+    )
+  }
+
+  return {
+    areas,
+    tables,
+    occupied,
+    loading,
+    saving,
+    elapsedMinutes,
+    refresh,
+    start,
+    stop,
+    openTable,
+    merge,
+    split,
+    createArea,
+    createTable,
+    updateTable,
+    removeTable,
+    placeLocally
+  }
 }

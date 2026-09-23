@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useOperator } from '../composables/useOperator'
 import { useTerminal } from '../composables/useTerminal'
@@ -42,6 +42,26 @@ const { label: connectionLabel, color: connectionColor } = useConnection()
 const shift = useShift()
 const sync = useSync()
 const offline = useOffline()
+
+/**
+ * El sondeo y el reintento arrancan acá, no en la pantalla de venta.
+ *
+ * La cabecera es la misma en la caja, en el salón y en la trastienda, así que es
+ * el único lugar que garantiza que el equipo siga hablando con el servidor
+ * mientras alguien lo tenga abierto. Colgados de la caja, un ticket cerrado sin
+ * red desde el salón se quedaba en el equipo —y el indicador de pendientes de
+ * esta misma cabecera marcaba cero, porque la bandeja ni siquiera se leía del
+ * disco—.
+ *
+ * Las dos llamadas son idempotentes: la pantalla de venta las repite y no pasa
+ * nada. El orden sí importa: primero se lee lo pendiente del disco y después se
+ * enciende el reintento, o la primera vuelta no encontraría nada que mandar.
+ */
+onMounted(async () => {
+  sync.start()
+  await offline.restore()
+  offline.startAutoFlush()
+})
 </script>
 
 <template>

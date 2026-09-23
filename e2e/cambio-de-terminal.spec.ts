@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { activateTerminal } from './support/terminal'
 
 /**
  * Cambiar de terminal en el mismo equipo (D-05).
@@ -13,11 +14,7 @@ test('un equipo activado como mostrador puede pasar a ser el salón', async ({ p
   await page.goto('/')
   await expect(page).toHaveURL(/\/terminal$/)
 
-  await page.getByLabel('Código de sucursal').fill('001')
-  await page.getByLabel('Código de terminal').fill('CAJA-01')
-  await page.getByLabel('Secreto de la terminal').fill('terminal-dev')
-  await page.getByRole('button', { name: 'Activar terminal' }).click()
-  await expect(page).not.toHaveURL(/\/terminal$/)
+  await activateTerminal(page, { branch: '001', terminal: 'CAJA-01', secret: 'terminal-dev' })
 
   // La pantalla del relevo es donde se descubre estar en la caja equivocada.
   if (!page.url().endsWith('/login')) {
@@ -32,10 +29,7 @@ test('un equipo activado como mostrador puede pasar a ser el salón', async ({ p
 
   await expect(page).toHaveURL(/\/terminal$/)
 
-  await page.getByLabel('Código de sucursal').fill('001')
-  await page.getByLabel('Código de terminal').fill('SALON-01')
-  await page.getByLabel('Secreto de la terminal').fill('terminal-dev')
-  await page.getByRole('button', { name: 'Activar terminal' }).click()
+  await activateTerminal(page, { branch: '001', terminal: 'SALON-01', secret: 'terminal-dev' })
 
   await expect(page).toHaveURL(/\/login$/)
   // Ahora es el salón, y con él su vocabulario y su perfil de pantalla (A-04).

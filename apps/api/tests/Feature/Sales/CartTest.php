@@ -111,16 +111,58 @@ class CartTest extends TestCase
         $this->assertSame('87.50', $result['sale']['total']);
     }
 
+    /** Una venta cerrada de verdad: es lo que una devolución necesita detrás. */
+    private function closedSale(string $price = '100.00'): string
+    {
+        $product = $this->product('P-REF', $price);
+        $sale = $this->openSale();
+        $this->addProduct($sale, $product, '1');
+
+        $this->withToken($this->token)
+            ->postJson("/api/sales/{$sale}/payments", ['method' => 'cash', 'amount' => $price])
+            ->assertCreated();
+
+        $this->withToken($this->token)->postJson("/api/sales/{$sale}/close")->assertOk();
+
+        return $sale;
+    }
+
     public function test_los_cinco_tipos_de_venta_viven_en_un_solo_modelo(): void
     {
         // B-01: mostrador, factura, presupuesto, orden de trabajo y devolución
         // sobre la misma tabla, distinguidos por `sale_type`.
-        foreach (['counter', 'invoice', 'quote', 'work_order', 'refund'] as $type) {
+        foreach (['counter', 'invoice', 'quote', 'work_order'] as $type) {
             $id = $this->openSale(['sale_type' => $type]);
             $this->assertSame($type, Sale::find($id)->sale_type);
         }
 
-        $this->assertSame(5, Sale::count());
+        // La devolución es el quinto tipo y vive en la misma tabla, pero **no se
+        // abre en el aire**: necesita el ticket que reversa. La regla la impone
+        // el POS antes de devolver nada, no el ERP cuando ya salió el dinero.
+        $original = $this->closedSale();
+
+        // Y con la firma del supervisor: devolver es sacar plata del cajón, así
+        // que el rol de cajero no lo trae.
+        $this->employee('SUPDEV', '4321', 'supervisor', '9876');
+
+        $refund = $this->openSale([
+            'sale_type' => 'refund',
+            'reverses_sale_id' => $original,
+            'supervisor_code' => 'SUPDEV',
+            'supervisor_pin' => '9876',
+        ]);
+
+        $this->assertSame('refund', Sale::find($refund)->sale_type);
+        $this->assertSame($original, Sale::find($refund)->reverses_sale_id);
+
+        $this->withToken($this->token)
+            ->postJson('/api/sales', [
+                'sale_type' => 'refund',
+                'supervisor_code' => 'SUPDEV',
+                'supervisor_pin' => '9876',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.reverses_sale_id.0', __('sales.refund_needs_original'));
     }
 
     public function test_suspender_es_un_estado_no_una_tabla_espejo(): void

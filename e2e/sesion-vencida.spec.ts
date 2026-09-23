@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { activateTerminal } from './support/terminal'
 
 /**
  * La credencial de la terminal que dejó de servir.
@@ -28,10 +29,7 @@ test('token de terminal revocado: la caja manda a activar, no a un error', async
   await expect(page).toHaveURL(/\/terminal$/)
 
   // Y desde ahí se entra normalmente.
-  await page.getByLabel('Código de sucursal').fill('001')
-  await page.getByLabel('Código de terminal').fill('CAJA-01')
-  await page.getByLabel('Secreto de la terminal').fill('terminal-dev')
-  await page.getByRole('button', { name: 'Activar terminal' }).click()
+  await activateTerminal(page, { branch: '001', terminal: 'CAJA-01', secret: 'terminal-dev' })
   await page.waitForTimeout(2500)
 
   if (page.url().endsWith('/login')) {

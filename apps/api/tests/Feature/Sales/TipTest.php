@@ -56,6 +56,41 @@ class TipTest extends TestCase
         return $id;
     }
 
+    /**
+     * Un ticket cerrado y las credenciales para devolver contra él.
+     *
+     * Devolver exige el documento original y la firma de un supervisor: la regla
+     * la impone el POS antes de abrir el cajón, no el ERP cuando el dinero ya
+     * salió.
+     *
+     * @return array{0:string,1:array<string,string>}
+     */
+    private function originalTicket(string $sku, string $price): array
+    {
+        $product = $this->product($sku, $price, ['allow_negative_stock' => true]);
+
+        $sale = $this->withToken($this->token)
+            ->postJson('/api/sales', [])->json('data.id');
+
+        $this->withToken($this->token)->postJson("/api/sales/{$sale}/lines", [
+            'kind' => 'product', 'product_id' => $product->id, 'qty' => '1',
+        ])->assertCreated();
+
+        $this->withToken($this->token)->postJson("/api/sales/{$sale}/payments", [
+            'method' => 'cash', 'amount' => $price,
+        ])->assertCreated();
+
+        $this->withToken($this->token)->postJson("/api/sales/{$sale}/close")->assertOk();
+
+        $this->employee('SUPDEV', '4321', 'supervisor', '9876');
+
+        return [$sale, [
+            'reverses_sale_id' => $sale,
+            'supervisor_code' => 'SUPDEV',
+            'supervisor_pin' => '9876',
+        ]];
+    }
+
     public function test_la_propina_no_toca_ningun_importe_fiscal(): void
     {
         $sale = $this->saleOf();
@@ -125,10 +160,11 @@ class TipTest extends TestCase
 
     public function test_la_devolucion_entrega_la_propina(): void
     {
-        $product = $this->product('PLATO-DEV', '115.00');
+        [, $refundOf] = $this->originalTicket('PLATO-DEV', '115.00');
+        $product = \App\Models\Product::where('sku', 'PLATO-DEV')->firstOrFail();
 
         $id = $this->withToken($this->token)
-            ->postJson('/api/sales', ['sale_type' => 'refund'])
+            ->postJson('/api/sales', ['sale_type' => 'refund'] + $refundOf)
             ->assertCreated()
             ->json('data.id');
 

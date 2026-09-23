@@ -4,9 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Denomination;
+use App\Models\Employee;
 use App\Models\Shift;
 use App\Services\Cash\CashMovementService;
 use App\Services\Cash\ShiftService;
+use App\Services\Receipts\ReceiptPdf;
+use App\Services\Receipts\ReceiptService;
+use App\Services\Supervision\SupervisorAuthorizer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -22,6 +26,9 @@ class ShiftController extends Controller
     public function __construct(
         private ShiftService $shifts,
         private CashMovementService $movements,
+        private SupervisorAuthorizer $authorizer,
+        private ReceiptService $receipts,
+        private ReceiptPdf $pdf,
     ) {}
 
     /** Denominaciones a contar. Configurables por país (D-06). */
@@ -147,6 +154,117 @@ class ShiftController extends Controller
         return response()->json([
             'message' => __('shift.retrieved'),
             'data' => $this->shifts->summary($shift),
+            'status' => 200,
+        ], 200);
+    }
+
+    /**
+     * El corte, en papel.
+     *
+     * `ReceiptService::forShift()` y la plantilla `shift_cut` existían desde el
+     * principio y no tenían quién las pidiera. El corte se entrega con el
+     * efectivo y se archiva: es el respaldo de lo que había en el cajón cuando
+     * alguien lo contó.
+     */
+    public function cutPdf(Request $request, string $id)
+    {
+        $shift = Shift::where('branch_id', $request->attributes->get('branch_id'))->find($id);
+
+        if (! $shift) {
+            return response()->json(['message' => __('shift.not_found'), 'status' => 404], 404);
+        }
+
+        $rendered = $this->receipts->forShift($shift, $this->shifts->summary($shift));
+
+        return $this->pdf->make($rendered['template'], $rendered['lines'], $rendered['context'])
+            ->stream('corte-'.$shift->code.'.pdf');
+    }
+
+    /**
+     * Los turnos ya cerrados, con su descuadre.
+     *
+     * Sin esta lista, un turno que cerró con faltante desaparecía de la vista:
+     * el corte existía pero había que saber su identificador para pedirlo.
+     */
+    public function index(Request $request)
+    {
+        $shifts = Shift::where('branch_id', $request->attributes->get('branch_id'))
+            ->where('status', 'closed')
+            ->orderByDesc('closed_at')
+            ->limit((int) $request->integer('limit', 50))
+            ->get();
+
+        $rows = $shifts->map(function (Shift $shift) {
+            $summary = $this->shifts->summary($shift);
+
+            return [
+                'id' => $shift->id,
+                'code' => $shift->code,
+                'terminal_id' => $shift->terminal_id,
+                'opened_at' => $shift->opened_at,
+                'closed_at' => $shift->closed_at,
+                'by_currency' => $summary['by_currency'],
+                'settled' => $summary['settled'],
+            ];
+        });
+
+        // Solo los que no cuadran: es la bandeja que el supervisor tiene que
+        // vaciar antes de que el ERP pueda cerrar el día.
+        if ($request->boolean('pending_only')) {
+            $rows = $rows->reject(fn (array $row) => $row['settled'])->values();
+        }
+
+        return response()->json([
+            'message' => __('shift.retrieved'),
+            'data' => $rows,
+            'status' => 200,
+        ], 200);
+    }
+
+    /**
+     * Cuadra un turno cerrado con diferencia.
+     *
+     * Exige **PIN de supervisor**, que es distinto del de sesión (P-11): mover
+     * plata de un arqueo ya cerrado es justo donde conviene el segundo freno.
+     * El monto no se recibe — es la diferencia que el corte calculó.
+     */
+    public function settle(Request $request, string $id)
+    {
+        $branchId = $request->attributes->get('branch_id');
+        $shift = Shift::where('branch_id', $branchId)->find($id);
+
+        if (! $shift) {
+            return response()->json(['message' => __('shift.not_found'), 'status' => 404], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'reason' => 'required|string|max:120',
+            'supervisor_code' => 'required|string|max:40',
+            'supervisor_pin' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => __('validation.errors'),
+                'errors' => $validator->errors(),
+                'status' => 422,
+            ], 422);
+        }
+
+        $data = $validator->validated();
+
+        $supervisor = $this->authorizer->authorize(
+            $data['supervisor_code'],
+            $data['supervisor_pin'],
+            'pos_shift.settle',
+            $branchId
+        );
+
+        $employee = Employee::find($request->attributes->get('employee_id'));
+
+        return response()->json([
+            'message' => __('shift.settled'),
+            'data' => $this->shifts->settle($shift, $employee ?? $supervisor, $data['reason'], $supervisor),
             'status' => 200,
         ], 200);
     }

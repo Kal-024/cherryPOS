@@ -7,6 +7,7 @@ use App\Models\ReceiptTemplate;
 use App\Services\Receipts\ReceiptRenderer;
 use App\Services\Receipts\ReceiptService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 /**
@@ -118,11 +119,68 @@ class ReceiptTemplateController extends Controller
             $this->renderer->validate($data['content']);
         }
 
-        $template->update($data);
+        DB::transaction(function () use ($template, $data) {
+            $template->update($data);
+
+            // Predeterminada hay una sola por tipo de documento y sucursal. Sin
+            // esto el desempate quedaba en el orden que devolviera la base, que
+            // es decir "cualquiera".
+            //
+            // Elegirla la enciende: marcar como predeterminada una plantilla
+            // apagada y que se siguiera imprimiendo otra sería el mismo engaño
+            // que se acaba de quitar al duplicar.
+            if (($data['is_default'] ?? false) === true) {
+                $template->update(['is_active' => true]);
+
+                ReceiptTemplate::where('branch_id', $template->branch_id)
+                    ->where('document_type', $template->document_type)
+                    ->whereKeyNot($template->id)
+                    ->update(['is_default' => false]);
+            }
+        });
 
         return response()->json([
             'message' => __('receipt.template_updated'),
             'data' => $template->fresh(),
+            'status' => 200,
+        ], 200);
+    }
+
+    /**
+     * Borra una copia de la sucursal.
+     *
+     * Las del sistema no se tocan: son el punto de retorno cuando alguien deja
+     * la suya irreconocible. Tampoco se borra la que está en uso — quedarse sin
+     * plantilla predeterminada deja la caja sin poder emitir, y eso se descubre
+     * con un cliente delante.
+     */
+    public function destroy(Request $request, string $id)
+    {
+        $template = $this->find($request, $id);
+
+        if (! $template) {
+            return response()->json(['message' => __('receipt.template_not_found'), 'status' => 404], 404);
+        }
+
+        if ($template->is_system && $template->branch_id === null) {
+            return response()->json([
+                'message' => __('receipt.system_template_readonly'),
+                'status' => 422,
+            ], 422);
+        }
+
+        if ($template->is_default) {
+            return response()->json([
+                'message' => __('receipt.default_template_kept'),
+                'status' => 422,
+            ], 422);
+        }
+
+        $template->delete();
+
+        return response()->json([
+            'message' => __('receipt.template_deleted'),
+            'data' => null,
             'status' => 200,
         ], 200);
     }
@@ -144,9 +202,20 @@ class ReceiptTemplateController extends Controller
 
         $copy = $template->replicate(['is_system']);
         $copy->branch_id = $request->attributes->get('branch_id');
-        $copy->code = $template->code.'-'.now()->format('ymdHis');
+        // Microsegundos, no segundos: con precisión de segundo, duplicar dos
+        // veces seguidas —o un doble clic— chocaba contra el índice único de
+        // (sucursal, código) y devolvía un error de base de datos en la cara.
+        $copy->code = mb_substr($template->code, 0, 20).'-'.now()->format('ymdHisu');
         $copy->name = $template->name.' ('.__('receipt.copy').')';
         $copy->is_system = false;
+        // **La copia nace apagada.** `ReceiptTemplate::resolve()` prefiere la de
+        // la sucursal sobre la del sistema, así que una copia activa pasaba a ser
+        // lo que se imprimía **desde el momento de duplicarla**: quien duplicaba
+        // para probar un diseño ya había cambiado el comprobante real sin que
+        // nada se lo dijera. Apagada, duplicar no cambia nada y elegir qué se usa
+        // vuelve a ser un acto explícito.
+        $copy->is_default = false;
+        $copy->is_active = false;
         $copy->save();
 
         return response()->json([

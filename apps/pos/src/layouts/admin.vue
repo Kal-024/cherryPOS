@@ -46,6 +46,13 @@ const links = computed<AdminLink[]>(() =>
       permissions: ['credit.read']
     },
     {
+      // Sin cuadrar la caja, el ERP no emite el comprobante contable del día.
+      to: '/admin/cajas',
+      label: t('admin.sections.cashboxes'),
+      icon: 'i-lucide-scale',
+      permissions: ['report.shift_cut']
+    },
+    {
       to: '/admin/gastos',
       label: t('admin.sections.expenses'),
       icon: 'i-lucide-receipt',
@@ -56,6 +63,14 @@ const links = computed<AdminLink[]>(() =>
       label: t('admin.sections.inventory'),
       icon: 'i-lucide-boxes',
       permissions: ['inventory.read']
+    },
+    {
+      // El plano se dibuja una vez, al instalar, y se retoca cuando el local
+      // cambia de muebles: es configuración, no servicio.
+      to: '/admin/salon',
+      label: t('admin.sections.floorPlan'),
+      icon: 'i-lucide-layout-dashboard',
+      permissions: ['dining.manage']
     },
     {
       to: '/admin/comprobantes',

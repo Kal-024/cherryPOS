@@ -15,6 +15,7 @@ import {
 } from '../../composables/useReceiptTemplates'
 import { useOperator } from '../../composables/useOperator'
 import ReceiptBlockEditor from '../../components/ReceiptBlockEditor.vue'
+import ReceiptPreview from '../../components/ReceiptPreview.vue'
 
 /**
  * Plantillas de comprobante (D-11, H5).
@@ -143,6 +144,42 @@ async function save() {
   }
 }
 
+/**
+ * Dice cuál se imprime.
+ *
+ * Hasta acá no había forma de decidirlo: la elección la hacía `resolve()` en
+ * silencio, prefiriendo la de la sucursal sobre la del sistema. Duplicar para
+ * probar un diseño ya cambiaba el comprobante real.
+ */
+async function useThis() {
+  if (!selected.value) return
+
+  try {
+    selected.value = await templates.makeDefault(selected.value.id)
+    await templates.list()
+    toast.add({ title: t('receipts.nowInUse'), color: 'success' })
+  } catch (err) {
+    toast.add({ title: firstApiErrorMessage(err), color: 'error' })
+  }
+}
+
+async function removeTemplate() {
+  if (!selected.value) return
+
+  try {
+    await templates.remove(selected.value.id)
+    selected.value = null
+    await templates.list()
+
+    const first = templates.templates.value[0]
+    if (first) await select(first)
+
+    toast.add({ title: t('receipts.deleted'), color: 'success' })
+  } catch (err) {
+    toast.add({ title: firstApiErrorMessage(err), color: 'error' })
+  }
+}
+
 async function duplicate() {
   if (!selected.value) return
 
@@ -166,9 +203,19 @@ async function duplicate() {
         :color="selected?.id === template.id ? 'primary' : 'neutral'"
         :variant="selected?.id === template.id ? 'solid' : 'subtle'"
         size="sm"
-        :label="template.name"
         @click="select(template)"
-      />
+      >
+        {{ template.name }}
+        <!-- Cuál se imprime, a la vista: era justo lo que no se podía saber. -->
+        <UBadge
+          v-if="template.is_default"
+          color="success"
+          size="sm"
+          variant="subtle"
+        >
+          {{ t('receipts.inUse') }}
+        </UBadge>
+      </UButton>
     </div>
 
     <UAlert
@@ -209,6 +256,28 @@ async function duplicate() {
             :label="t('receipts.save')"
             @click="save"
           />
+
+          <UButton
+            v-if="canEdit && !selected.is_default"
+            icon="i-lucide-check-check"
+            color="success"
+            variant="subtle"
+            :loading="templates.saving.value"
+            :label="t('receipts.useThis')"
+            @click="useThis"
+          />
+
+          <!-- Borrar solo lo propio, y solo lo que no está en uso: el servidor
+               rechaza lo demás y acá se oculta para no ofrecer un callejón. -->
+          <UButton
+            v-if="canEdit && !isSystem && !selected.is_default"
+            icon="i-lucide-trash-2"
+            color="error"
+            variant="ghost"
+            :loading="templates.saving.value"
+            :label="t('receipts.deleteCopy')"
+            @click="removeTemplate"
+          />
         </div>
 
         <div class="flex flex-col gap-2">
@@ -237,7 +306,15 @@ async function duplicate() {
         </div>
       </div>
 
-      <div class="flex flex-col gap-2">
+      <!--
+        La vista previa **acompaña** al editor.
+
+        El editor crece hacia abajo tanto como bloques tenga la plantilla, y sin
+        esto la previsualización se quedaba arriba: se terminaba de configurar a
+        ciegas, mirando un recuadro que ya estaba fuera de la pantalla. Ese era
+        además el motivo de que pareciera que los cambios no se reflejaban.
+      -->
+      <div class="flex flex-col gap-2 lg:sticky lg:top-0 lg:max-h-[calc(100vh-7rem)] lg:self-start lg:overflow-auto">
         <span class="text-sm font-medium">{{ t('receipts.preview') }}</span>
 
         <UAlert
@@ -249,10 +326,7 @@ async function duplicate() {
 
         <!-- Monoespaciado y con el ancho exacto del papel: es la única forma de
              ver si un nombre largo se corta antes de que lo vea un cliente. -->
-        <pre
-          v-if="preview"
-          class="overflow-x-auto rounded-lg border border-default bg-elevated p-3 font-mono text-xs leading-tight"
-        >{{ preview.lines.map((line) => line.text).join('\n') }}</pre>
+        <ReceiptPreview v-if="preview" :lines="preview.lines" :width="preview.width" />
 
         <p class="text-muted text-xs">
           {{ t('receipts.previewHint', { width: preview?.width ?? PAPER_WIDTHS[paper] }) }}

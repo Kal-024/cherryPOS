@@ -19,7 +19,20 @@ import { amount } from '../utils/money'
  * registrado, porque calcularlo en el terminal abriría una tercera
  * implementación de las fórmulas — justo lo que el proyecto decidió no tener.
  */
-const emit = defineEmits<{ closed: [string | null] }>()
+/**
+ * Qué se sabe de la venta recién cerrada.
+ *
+ * Va el identificador además del número porque el comprobante se pide por
+ * identificador, y va `offline` porque **sin servidor no hay comprobante que
+ * pedir**: el ticket todavía vive en la bandeja de salida de este equipo.
+ */
+export interface ClosedSale {
+  id: string
+  number: string | null
+  offline: boolean
+}
+
+const emit = defineEmits<{ closed: [ClosedSale | null] }>()
 
 const { t } = useI18n()
 const cart = useCart()
@@ -90,7 +103,26 @@ async function applyTip(value: string) {
 }
 
 const due = computed(() => cart.sale.value?.balance ?? '0.00')
-const settled = computed(() => Number(due.value) <= 0 && (cart.sale.value?.lines?.length ?? 0) > 0)
+
+/** Devolver es lo contrario de cobrar: los importes van en negativo. */
+const isRefund = computed(() => cart.sale.value?.sale_type === 'refund')
+
+/**
+ * ¿Está saldada?
+ *
+ * En una venta, cuando no falta nada por cobrar. En una **devolución**, cuando
+ * se entregó exactamente lo que había que devolver: con el criterio de la venta
+ * —"el saldo no es positivo"— una devolución nacía dada por saldada, porque su
+ * saldo empieza en negativo. El cajero podía cerrarla sin haber entregado el
+ * dinero, y el arqueo lo descubría al final del turno.
+ */
+const settled = computed(() => {
+  const lines = cart.sale.value?.lines?.length ?? 0
+
+  if (lines === 0) return false
+
+  return isRefund.value ? Number(due.value) === 0 : Number(due.value) <= 0
+})
 
 const methods = computed(() => [
   { value: 'cash', label: t('payment.cash'), icon: 'i-lucide-banknote' },
@@ -98,6 +130,17 @@ const methods = computed(() => [
   { value: 'transfer', label: t('payment.transfer'), icon: 'i-lucide-arrow-left-right' },
   { value: 'credit', label: t('payment.credit'), icon: 'i-lucide-notebook-pen' }
 ])
+
+/**
+ * El crédito necesita a quién cargárselo, y hay que decirlo **antes**.
+ *
+ * Sin esto el aviso llegaba al cerrar —"el cliente no tiene cuenta de crédito
+ * abierta"— con la venta cobrada a medias y sin explicar que lo que faltaba era
+ * elegir al cliente en la pantalla anterior.
+ */
+const creditNeedsCustomer = computed(() =>
+  method.value === 'credit' && cart.sale.value?.customer_id == null
+)
 
 watch(method, () => {
   // Cambiar de medio devuelve la moneda a la base: solo el efectivo se recibe
@@ -120,7 +163,13 @@ function exact() {
 async function add() {
   error.value = ''
 
-  if (received.value === '' || Number(received.value) <= 0) return
+  // Cero no es un pago. Y el signo lo manda el tipo de venta: en una devolución
+  // el dinero sale, así que el importe es negativo — con la guarda de la venta,
+  // el pago no se registraba nunca y la devolución no se podía cerrar.
+  const entered = Number(received.value)
+
+  if (received.value === '' || entered === 0) return
+  if (isRefund.value ? entered > 0 : entered < 0) return
 
   try {
     await cart.addPayment({
@@ -144,8 +193,10 @@ async function confirm() {
     // Sin servidor el ticket se numera con el bloque reservado de esta
     // terminal, y para eso hacen falta la sucursal y el cajero: los dos van en
     // el ticket que se encola.
+    const degraded = cart.degraded.value
     const closed = await cart.close(branch.value?.code ?? '001', employee.value?.id ?? '')
-    emit('closed', closed?.number ?? null)
+
+    emit('closed', closed ? { id: closed.id, number: closed.number, offline: degraded } : null)
   } catch {
     error.value = cart.lastError.value
   }
@@ -165,10 +216,19 @@ defineExpose({ focusAmount })
       </span>
     </div>
 
-    <div v-if="Number(cart.change.value) > 0" class="flex items-baseline justify-between px-4">
-      <span class="text-muted">{{ t('sale.change') }}</span>
-      <span class="pos-amount text-xl font-semibold">{{ amount(cart.change.value) }}</span>
-    </div>
+    <!-- El vuelto **no se repite acá**: lo canta el bloque de totales, que está
+         justo encima y se lee desde la misma distancia. Mostrarlo en los dos
+         sitios ponía cuatro números en pantalla —total, vuelto, a cobrar,
+         vuelto— y obligaba a leerlos todos para saber cuál mandaba. -->
+
+    <!-- Falta elegir a quién cargárselo, y se dice acá y no al cerrar. -->
+    <UAlert
+      v-if="creditNeedsCustomer"
+      color="warning"
+      variant="subtle"
+      :title="t('payment.creditNeedsCustomer')"
+      :description="t('payment.creditNeedsCustomerHint')"
+    />
 
     <!-- La propina, antes de cobrar: después del pago habría que volver atrás. -->
     <div v-if="tipEnabled" class="flex flex-col gap-2 rounded-lg border border-default px-3 py-2">
@@ -286,6 +346,7 @@ defineExpose({ focusAmount })
           icon="i-lucide-plus"
           size="lg"
           :loading="cart.busy.value"
+          :disabled="creditNeedsCustomer"
           :aria-label="t('payment.add')"
           @click="add"
         />

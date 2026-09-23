@@ -40,11 +40,100 @@ const guests = ref(2)
 const merging = ref<DiningTable | null>(null)
 const mergeWith = ref<string[]>([])
 
+/**
+ * Unir arrastrando una mesa sobre otra.
+ *
+ * El camino anterior no se entendía, y con razón: el botón "Unir mesas" elegía
+ * la principal **por su cuenta** —la primera libre del área— y solo dejaba
+ * marcar cuáles se le sumaban. Nadie decía cuál mandaba ni por qué.
+ *
+ * Juntar dos mesas es un gesto físico: en el local alguien las empuja hasta que
+ * se tocan. Acá es el mismo gesto. La mesa sobre la que se suelta es la
+ * principal —queda en su sitio, que es lo que el mesero espera— y la arrastrada
+ * se le acopla.
+ *
+ * El modal sigue existiendo para pantallas chicas y para mesas que están lejos
+ * en el plano, pero ahora deja **elegir la principal** en vez de decidirla en
+ * silencio.
+ */
+const dragged = ref<DiningTable | null>(null)
+const dropTarget = ref<DiningTable | null>(null)
+
+/**
+ * Soltar el dedo también emite un `click`.
+ *
+ * Sin esto, arrastrar una mesa sobre otra las unía **y además** abría la cuenta
+ * de la mesa soltada: el gesto hacía dos cosas y solo una se había pedido. Se
+ * recuerda el punto donde empezó el arrastre y se descarta el toque si el dedo
+ * recorrió más que un temblor de mano.
+ */
+const DRAG_SLOP = 8
+
+let dragStart: { x: number, y: number } | null = null
+let justDragged = false
+
 const canServe = computed(() => can('dining.serve'))
 
 const visible = computed(() =>
   dining.tables.value.filter((table) => !selectedArea.value || table.area_id === selectedArea.value)
 )
+
+/**
+ * Dónde se dibuja cada mesa.
+ *
+ * Las unidas se pintan **pegadas a su principal**, en fila. Unir dos mesas que
+ * siguen cada una en su rincón del plano no se lee como una sola unidad, que es
+ * justo lo que son: una cuenta, un cobro. Al arrimarlas, el grupo se mueve y se
+ * entiende de un vistazo desde el otro lado del salón.
+ *
+ * **No se tocan sus coordenadas.** `pos_x` y `pos_y` dicen dónde está el mueble
+ * y eso no cambia porque dos mesas compartan cuenta; además moverlas de verdad
+ * exigiría `dining.manage`, que un mesero no tiene. Al separarlas, cada una
+ * vuelve sola a su sitio.
+ */
+const WIDTH = 112
+
+/** Hasta dónde llega el plano, más un margen para que la última mesa respire. */
+const planSize = computed(() => {
+  const right = Math.max(0, ...placed.value.map((item) => item.x + WIDTH))
+  const bottom = Math.max(0, ...placed.value.map((item) => item.y + WIDTH))
+
+  return {
+    minWidth: `${Math.max(512, right + 40)}px`,
+    minHeight: `${Math.max(512, bottom + 40)}px`
+  }
+})
+
+const placed = computed(() => {
+  const order = new Map<string, number>()
+
+  return visible.value.map((table) => {
+    if (!table.merged_into_id) return { table, x: table.pos_x, y: table.pos_y }
+
+    const main = dining.tables.value.find((other) => other.id === table.merged_into_id)
+
+    if (!main) return { table, x: table.pos_x, y: table.pos_y }
+
+    const position = (order.get(main.id) ?? 0) + 1
+    order.set(main.id, position)
+
+    // Menos cuatro píxeles: los bordes se tocan en vez de dejar una ranura.
+    return { table, x: main.pos_x + position * (WIDTH - 4), y: main.pos_y }
+  })
+})
+
+/** Todas las libres del área: cualquiera puede ser la principal. */
+const freeTables = computed(() =>
+  visible.value
+    .filter((table) => table.state === 'free')
+    .map((table) => ({ label: table.name ?? table.code, value: table.id }))
+)
+
+/** Cambiar de principal descarta lo marcado: la lista de candidatas es otra. */
+function pickMain(id: string) {
+  merging.value = visible.value.find((table) => table.id === id) ?? null
+  mergeWith.value = []
+}
 
 /** Las libres de la misma zona: las únicas que se pueden unir a esta. */
 const mergeCandidates = computed(() =>
@@ -102,6 +191,13 @@ async function fire(table: DiningTable) {
 }
 
 async function tap(table: DiningTable) {
+  // El toque que cierra un arrastre no es un toque.
+  if (justDragged) {
+    justDragged = false
+
+    return
+  }
+
   if (table.state === 'merged') {
     toast.add({ title: t('dining.tableMerged'), color: 'info' })
 
@@ -142,6 +238,64 @@ async function openAccount(saleId: string) {
   try {
     await cart.resume(saleId)
     await router.push('/')
+  } catch (err) {
+    toast.add({ title: firstApiErrorMessage(err), color: 'error' })
+  }
+}
+
+/** Qué mesa hay debajo del punto donde se soltó. */
+function tableUnder(event: PointerEvent, exclude: string): DiningTable | null {
+  const under = document.elementFromPoint(event.clientX, event.clientY)
+  const id = under?.closest('[data-table-id]')?.getAttribute('data-table-id')
+
+  if (!id || id === exclude) return null
+
+  return visible.value.find((table) => table.id === id) ?? null
+}
+
+function startTableDrag(event: PointerEvent, table: DiningTable) {
+  if (!canServe.value || table.state === 'merged') return
+
+  dragged.value = table
+  dragStart = { x: event.clientX, y: event.clientY }
+  justDragged = false
+  ;(event.currentTarget as HTMLElement)?.setPointerCapture?.(event.pointerId)
+}
+
+function onTableDrag(event: PointerEvent) {
+  if (!dragged.value || !dragStart) return
+
+  const far =
+    Math.abs(event.clientX - dragStart.x) > DRAG_SLOP ||
+    Math.abs(event.clientY - dragStart.y) > DRAG_SLOP
+
+  if (!far) return
+
+  justDragged = true
+  dropTarget.value = tableUnder(event, dragged.value.id)
+}
+
+async function endTableDrag(event: PointerEvent) {
+  const source = dragged.value
+  const moved = justDragged
+  const target = dropTarget.value ?? (source ? tableUnder(event, source.id) : null)
+
+  dragged.value = null
+  dropTarget.value = null
+  dragStart = null
+
+  // Sin recorrido fue un toque, y un toque abre la cuenta: lo resuelve `tap`.
+  if (!source || !target || !moved) {
+    justDragged = false
+
+    return
+  }
+
+  try {
+    // El servidor impone el resto: no une una mesa ya unida ni absorbe una con
+    // cuenta abierta. Acá no se repiten esas reglas, se dejan hablar.
+    await dining.merge(target.id, [source.id])
+    toast.add({ title: t('floorPlan.merged'), color: 'success' })
   } catch (err) {
     toast.add({ title: firstApiErrorMessage(err), color: 'error' })
   }
@@ -234,20 +388,38 @@ async function split(table: DiningTable) {
     </div>
 
     <!-- El plano. Las coordenadas vienen de la configuración del salón: cada
-         mesa está donde está en el local. -->
+         mesa está donde está en el local.
+
+         **Lo que se anima es el toque, no el dato.** La transición estaba sobre
+         todas las propiedades y en la clase estática de todas las fichas, y el
+         mapa se reemplaza entero cada cinco segundos por el sondeo: las N mesas
+         recalculaban color a la vez y las N transiciones corrían juntas, de modo
+         que tocar una parecía estar modificándolas todas. El color de estado
+         ahora cambia de golpe, como un semáforo, y lo único que se mueve es la
+         ficha que el dedo está apretando. -->
     <div v-else class="min-h-0 grow overflow-auto rounded-lg border border-default bg-elevated/30 p-4">
-      <div class="relative" style="min-height: 32rem; min-width: 32rem;">
+      <!-- El lienzo crece con el plano. Con un tamaño fijo, una mesa colocada
+           lejos quedaba recortada y **el mesero no podía tocarla**: el salón se
+           dibuja según el local, y el local no cabe siempre en 32 rem. -->
+      <div class="relative" :style="planSize">
         <button
-          v-for="table in visible"
+          v-for="{ table, x, y } in placed"
           :key="table.id"
           type="button"
-          class="absolute flex w-28 flex-col items-center justify-center gap-0.5 border-2 p-2 text-sm transition"
+          :data-table-id="table.id"
+          class="absolute flex w-28 touch-none flex-col items-center justify-center gap-0.5 border-2 p-2 text-sm transition-transform duration-100 active:scale-95"
           :class="[
             tone(table),
-            table.shape === 'round' ? 'rounded-full h-28' : 'rounded-lg h-24'
+            table.shape === 'round' ? 'rounded-full h-28' : 'rounded-lg h-24',
+            dragged?.id === table.id ? 'opacity-60' : '',
+            dropTarget?.id === table.id ? 'border-primary ring-2 ring-primary' : ''
           ]"
-          :style="{ left: `${table.pos_x}px`, top: `${table.pos_y}px` }"
+          :style="{ left: `${x}px`, top: `${y}px` }"
           @click="tap(table)"
+          @pointerdown="startTableDrag($event, table)"
+          @pointermove="onTableDrag"
+          @pointerup="endTableDrag"
+          @pointercancel="endTableDrag"
         >
           <span class="font-semibold">{{ table.name ?? table.code }}</span>
 
@@ -279,15 +451,19 @@ async function split(table: DiningTable) {
     </div>
 
     <div v-if="canServe" class="flex flex-wrap items-center gap-2">
+      <!-- Arrastrar una mesa sobre otra es el camino corto; este botón es el
+           largo, para mesas que están lejos en el plano. -->
       <UButton
         icon="i-lucide-link"
         color="neutral"
         variant="subtle"
         size="sm"
-        :disabled="visible.length < 2"
+        :disabled="visible.filter((table) => table.state === 'free').length < 2"
         :label="t('dining.merge')"
         @click="merging = visible.find((table) => table.state === 'free') ?? null"
       />
+
+      <span class="text-muted text-xs">{{ t('floorPlan.mergeDrop') }}</span>
 
       <UButton
         v-for="table in visible.filter((item) => item.merged_into_id === null && dining.tables.value.some((other) => other.merged_into_id === item.id))"
@@ -345,6 +521,18 @@ async function split(table: DiningTable) {
           <p class="text-muted text-sm">
             {{ t('dining.mergeHint') }}
           </p>
+
+          <!-- Cuál manda se elige, no se adivina: la principal conserva su
+               sitio en el plano y es la que cobra por todas. -->
+          <UFormField :label="t('dining.mergeMainTable')">
+            <USelect
+              :model-value="merging?.id"
+              :items="freeTables"
+              value-key="value"
+              class="w-full"
+              @update:model-value="pickMain($event as string)"
+            />
+          </UFormField>
 
           <UFormField :label="t('dining.mergeMain')">
             <USelect

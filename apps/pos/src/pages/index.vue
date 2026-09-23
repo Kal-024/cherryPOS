@@ -1,21 +1,24 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { type SaleLine, useCart } from '../composables/useCart'
+import { type Sale, type SaleLine, useCart } from '../composables/useCart'
 import { useCatalog, type CatalogProduct } from '../composables/useCatalog'
 import { useShift, type ShiftSummary } from '../composables/useShift'
 import { useOffline } from '../composables/useOffline'
 import { useSync } from '../composables/useSync'
 import { useKitchen } from '../composables/useKitchen'
 import { useVocabulary } from '../composables/useVocabulary'
-import { firstApiErrorMessage } from '../composables/httpClient'
+import { apiOpen, firstApiErrorMessage } from '../composables/httpClient'
 import { STORES, get } from '../db/idb'
 import { scoped } from '../db/scope'
 import { amount } from '../utils/money'
 import SaleSearch from '../components/SaleSearch.vue'
 import SaleLines from '../components/SaleLines.vue'
 import SaleTotals from '../components/SaleTotals.vue'
-import PaymentPanel from '../components/PaymentPanel.vue'
+import PaymentPanel, { type ClosedSale } from '../components/PaymentPanel.vue'
+import CustomerPicker from '../components/CustomerPicker.vue'
+import RefundDialog from '../components/RefundDialog.vue'
+import { type Customer, useCustomers } from '../composables/useCustomers'
 import ShiftPanel from '../components/ShiftPanel.vue'
 import ModifierPicker from '../components/ModifierPicker.vue'
 import SaleSplitDialog from '../components/SaleSplitDialog.vue'
@@ -67,7 +70,29 @@ const suspendLabel = ref('')
 const askingLabel = ref(false)
 /** El plato que está esperando que le respondan sus modificadores (B-06). */
 const asking = ref<CatalogProduct | null>(null)
-const lastClosed = ref<string | null>(null)
+const lastClosed = ref<ClosedSale | null>(null)
+
+/**
+ * A quién se le vende (Q-03).
+ *
+ * Se guarda el cliente entero y no solo su identificador porque la cabecera
+ * muestra el nombre, y volver a pedirlo al servidor en cada refresco sería un
+ * viaje por cada tecla. Al recuperar una venta a medias se relee una vez.
+ */
+const customers = useCustomers()
+const customer = ref<Customer | null>(null)
+const pickingCustomer = ref(false)
+
+/**
+ * La devolución (H2.6).
+ *
+ * Se arma en su propio diálogo —buscar el ticket, marcar lo que vuelve— y al
+ * confirmar la venta de devolución pasa a ser el carrito. De ahí en adelante se
+ * cobra con el panel de siempre, en negativo: una sola forma de cerrar una venta
+ * es lo que hace que una devolución cuadre igual que un ticket.
+ */
+const refunding = ref(false)
+const isRefund = computed(() => cart.sale.value?.sale_type === 'refund')
 const notice = ref('')
 
 const canCharge = computed(() => (cart.lines.value.length ?? 0) > 0)
@@ -99,6 +124,7 @@ onMounted(async () => {
   // Lo que quedó a medias: el criterio de aceptación de H2.5.
   const saved = await get<{ id: string }>(STORES.carts, scoped('current'))
   await cart.recover(saved?.id ?? null)
+  await syncCustomer()
 
   sync.start()
   window.addEventListener('keydown', onKey)
@@ -111,16 +137,14 @@ onMounted(async () => {
  * Lo decide el sondeo, que es quien realmente sabe si el servidor de la
  * sucursal contesta: la red del navegador puede estar perfecta y el servidor
  * apagado.
+ *
+ * Acá ya no se manda lo pendiente: eso pasó a `useOffline`, que lo reintenta
+ * mientras la aplicación esté abierta y no solo mientras lo esté esta pantalla.
  */
 watch(
   () => sync.reachable.value,
-  async (reachable) => {
+  (reachable) => {
     cart.degraded.value = !reachable && offline.canSellOffline.value
-
-    if (reachable && offline.pending.value.length > 0) {
-      // Volvió la red: lo pendiente sale solo, sin que nadie lo pida.
-      await offline.flush()
-    }
   }
 )
 
@@ -245,8 +269,13 @@ function onKey(event: KeyboardEvent) {
   } else if (event.key === 'F4') {
     event.preventDefault()
     showSuspended.value = !showSuspended.value
+  } else if (event.key === 'F7' && cart.isOpen.value) {
+    // A quién se le vende: hace falta antes de cobrar a crédito, y sin teclado
+    // también se llega tocando el renglón del cliente.
+    event.preventDefault()
+    pickingCustomer.value = true
   } else if (event.key === 'Escape') {
-    if (charging.value || showSuspended.value || showHelp.value || askingLabel.value) {
+    if (charging.value || showSuspended.value || showHelp.value || askingLabel.value || pickingCustomer.value) {
       event.preventDefault()
       dismiss()
     }
@@ -258,7 +287,35 @@ function dismiss() {
   showSuspended.value = false
   showHelp.value = false
   askingLabel.value = false
+  pickingCustomer.value = false
   focusSearch()
+}
+
+function onRefundStarted(sale: Sale) {
+  cart.adopt(sale)
+  notice.value = ''
+  void cart.refresh()
+  focusSearch()
+}
+
+async function chooseCustomer(next: Customer | null) {
+  try {
+    await cart.setCustomer(next?.id ?? null)
+    customer.value = next
+  } catch {
+    notice.value = cart.lastError.value
+  }
+
+  focusSearch()
+}
+
+/** La venta recuperada trae el identificador; el nombre hay que ir a buscarlo. */
+async function syncCustomer() {
+  const id = cart.sale.value?.customer_id ?? null
+
+  if (id === (customer.value?.id ?? null)) return
+
+  customer.value = id ? await customers.find(id).catch(() => null) : null
 }
 
 async function addProduct(product: CatalogProduct, qty = '1') {
@@ -436,10 +493,31 @@ async function resume(saleId: string) {
   focusSearch()
 }
 
-function onClosed(number: string | null) {
+function onClosed(closed: ClosedSale | null) {
   charging.value = false
-  lastClosed.value = number
+  lastClosed.value = closed
   focusSearch()
+}
+
+/**
+ * El comprobante, mientras no exista la térmica (H5.3, Q-05).
+ *
+ * Se abre en una pestaña y no se descarga: el cajero lo entrega en mano, así
+ * que lo que necesita es el visor del navegador con su botón de imprimir.
+ *
+ * No aparece tras un ticket vendido sin servidor: esa venta todavía está en la
+ * bandeja de salida de este equipo y el servidor no la conoce. Pedirle el
+ * comprobante devolvería un 404 sin explicar por qué.
+ */
+async function openReceipt() {
+  if (!lastClosed.value || lastClosed.value.offline) return
+
+  try {
+    await apiOpen(`/sales/${lastClosed.value.id}/receipt/pdf`)
+    focusSearch()
+  } catch (err) {
+    notice.value = firstApiErrorMessage(err)
+  }
 }
 
 function onShiftReady() {
@@ -539,6 +617,37 @@ function onShiftClosed(cut: ShiftSummary) {
 
     <!-- Columna fija: total siempre visible y acciones. -->
     <aside class="flex min-h-0 flex-col gap-3">
+      <!--
+        A quién se le vende (Q-03).
+
+        Va arriba del total y no escondido en el cobro: el cliente exonerado
+        cambia el impuesto, así que elegirlo después de cantar el total sería
+        cantar un número que va a cambiar. Y sin esto no había forma de cobrar a
+        crédito: el error salía recién al cerrar.
+      -->
+      <UButton
+        v-if="cart.isOpen.value"
+        color="neutral"
+        variant="subtle"
+        icon="i-lucide-user"
+        block
+        @click="pickingCustomer = true"
+      >
+        <span class="truncate">{{ customer?.name ?? t('customerPicker.none') }}</span>
+        <UKbd value="F7" />
+      </UButton>
+
+      <!-- Devolver y vender se parecen demasiado en pantalla: el aviso evita
+           cobrar creyendo que se devuelve, o al revés. -->
+      <UAlert
+        v-if="isRefund"
+        color="warning"
+        variant="subtle"
+        icon="i-lucide-undo-2"
+        :title="t('refund.inProgress')"
+        :description="t('refund.inProgressHint')"
+      />
+
       <SaleTotals :sale="cart.sale.value" />
 
       <PaymentPanel v-if="charging" ref="payment" @closed="onClosed" />
@@ -603,6 +712,18 @@ function onShiftClosed(cut: ShiftSummary) {
               {{ suspended.length }}
             </UBadge>
           </UButton>
+
+          <!-- Devolver empieza por buscar el ticket original, así que no se
+               ofrece con una venta a medias: serían dos documentos en curso. -->
+          <UButton
+            v-if="!cart.isOpen.value"
+            color="neutral"
+            variant="subtle"
+            icon="i-lucide-undo-2"
+            @click="refunding = true"
+          >
+            {{ t('refund.action') }}
+          </UButton>
         </div>
       </template>
 
@@ -611,11 +732,24 @@ function onShiftClosed(cut: ShiftSummary) {
         v-if="lastClosed"
         color="success"
         variant="subtle"
-        :title="t('sale.closed', { number: lastClosed })"
+        :title="t('sale.closed', { number: lastClosed.number })"
         :description="t('sale.openDrawerHint')"
         close
         @update:open="lastClosed = null"
-      />
+      >
+        <template #actions>
+          <UButton
+            v-if="!lastClosed.offline"
+            color="success"
+            variant="solid"
+            size="sm"
+            icon="i-lucide-receipt"
+            @click="openReceipt"
+          >
+            {{ t('sale.printPdf') }}
+          </UButton>
+        </template>
+      </UAlert>
 
       <div class="grow" />
 
@@ -631,6 +765,14 @@ function onShiftClosed(cut: ShiftSummary) {
       </UButton>
     </aside>
   </div>
+
+  <CustomerPicker
+    v-model:open="pickingCustomer"
+    :selected="customer"
+    @choose="chooseCustomer"
+  />
+
+  <RefundDialog v-model:open="refunding" @started="onRefundStarted" />
 
   <!-- Suspender pide una referencia: "Mesa 4" o el nombre del cliente es lo que
        permite reconocerla después (D-01). -->
@@ -711,6 +853,7 @@ function onShiftClosed(cut: ShiftSummary) {
         </div>
         <div class="flex items-center gap-3">
           <UKbd value="F4" /><dd>{{ vt('shortcuts.suspended') }}</dd>
+          <UKbd value="F7" /><dd>{{ t('shortcuts.customer') }}</dd>
         </div>
         <div class="flex items-center gap-3">
           <UKbd value="F6" /><dd>{{ t('shortcuts.qtyEdit') }}</dd>

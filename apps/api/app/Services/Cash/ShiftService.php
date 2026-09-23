@@ -3,6 +3,7 @@
 namespace App\Services\Cash;
 
 use App\Models\CashCount;
+use App\Models\CashMovement;
 use App\Models\Denomination;
 use App\Models\Employee;
 use App\Models\Shift;
@@ -122,6 +123,82 @@ class ShiftService
     }
 
     /**
+     * Cuadra un turno ya cerrado, sin reescribir el arqueo (P1).
+     *
+     * Al cerrar aparece el faltante o el sobrante y hasta acá no había nada que
+     * hacer con él: el turno quedaba descuadrado para siempre. No es un detalle
+     * de orden — el ERP no emite el comprobante contable del día si la caja no
+     * cuadra, y el objetivo del negocio es cerrar siempre cuadrado.
+     *
+     * **El conteo no se toca.** La diferencia se salda con un movimiento de caja
+     * por moneda —salida si faltó, entrada si sobró—, con su motivo y su
+     * autorización. Como lo esperado en el cajón ya suma los movimientos, la
+     * diferencia queda en cero por aritmética y no por decreto, y el conteo
+     * original sigue diciendo qué se contó de verdad.
+     *
+     * El monto no se teclea: es exactamente la diferencia que el propio corte
+     * calculó. Dejarlo a mano abriría la puerta a "cuadrar" con un número
+     * redondo que no corresponde a nada.
+     *
+     * @return array<string,mixed> el corte ya cuadrado
+     */
+    public function settle(Shift $shift, Employee $employee, string $reason, ?Employee $authorizedBy = null): array
+    {
+        if ($shift->isOpen()) {
+            throw ValidationException::withMessages(['shift' => __('shift.not_closed')]);
+        }
+
+        $summary = $this->summary($shift);
+        $pending = array_filter(
+            $summary['by_currency'],
+            static fn (array $row) => bccomp($row['difference'], '0', 2) !== 0
+        );
+
+        if ($pending === []) {
+            throw ValidationException::withMessages(['shift' => __('shift.already_settled')]);
+        }
+
+        return DB::transaction(function () use ($shift, $employee, $reason, $authorizedBy, $pending) {
+            foreach ($pending as $row) {
+                $difference = $row['difference'];
+                $falta = bccomp($difference, '0', 2) === -1;
+
+                CashMovement::create([
+                    'shift_id' => $shift->id,
+                    'branch_id' => $shift->branch_id,
+                    'employee_id' => $employee->id,
+                    'authorized_by' => $authorizedBy?->id,
+                    // Faltó: sale del cajón lo que no estaba. Sobró: entra.
+                    'direction' => $falta ? 'out' : 'in',
+                    'reason' => $reason,
+                    'is_settlement' => true,
+                    'amount' => ltrim($difference, '-'),
+                    'currency_code' => $row['currency_code'],
+                    'exchange_rate' => $shift->exchange_rate,
+                    'amount_base' => ltrim($difference, '-'),
+                    'occurred_at' => now(),
+                    'recorded_at' => now(),
+                ]);
+            }
+
+            $this->audit->record(
+                event: 'shift.settled',
+                entityType: 'shift',
+                entityId: $shift->id,
+                context: [
+                    'code' => $shift->code,
+                    'reason' => $reason,
+                    'settled' => array_values($pending),
+                ],
+                authorizedBy: $authorizedBy?->id,
+                branchId: $shift->branch_id,
+            );
+
+            return $this->summary($shift->fresh());
+        });
+    }
+
+    /**
      * Corte del turno: lo esperado, lo contado y la diferencia, por moneda; más
      * el desglose por cajero.
      *
@@ -165,6 +242,18 @@ class ShiftService
             // ticket por ticket para saber cuánto (G-16).
             'tips' => $this->tipTotals($shift),
             'denominations' => $this->denominationBreakdown($shift),
+            // Cuadrado es que no quede diferencia en ninguna moneda. Se deduce
+            // de los números, no se guarda: un turno "marcado como cuadrado"
+            // con la diferencia viva sería exactamente lo que hay que evitar.
+            'settled' => array_reduce(
+                $byCurrency,
+                static fn (bool $carry, array $row) => $carry && bccomp($row['difference'], '0', 2) === 0,
+                true
+            ),
+            'settlements' => CashMovement::where('shift_id', $shift->id)
+                ->where('is_settlement', true)
+                ->orderBy('occurred_at')
+                ->get(['id', 'direction', 'reason', 'amount', 'currency_code', 'authorized_by', 'occurred_at']),
         ];
     }
 

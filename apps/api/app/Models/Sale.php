@@ -55,6 +55,41 @@ class Sale extends Model
         'recorded_at' => 'datetime',
     ];
 
+    /**
+     * El vuelto viaja siempre, también antes de cerrar.
+     *
+     * Hasta que existió, el cajero **nunca lo veía con servidor**: la fila de
+     * vuelto —pago negativo en efectivo— la crea `SaleCloser` dentro de
+     * `close()`, así que mientras cobraba valía cero y el renglón no llegaba a
+     * dibujarse. Sin servidor sí aparecía, porque el motor local lo inyecta en
+     * cada refresco, y esa diferencia hacía que el comportamiento pareciera
+     * caprichoso.
+     *
+     * Se expone como atributo y no como columna porque **es una resta de dos
+     * importes que el motor ya calculó**, sin impuesto, descuento ni redondeo
+     * encima: no es una fórmula nueva, es la misma que `engine.ts` aplica al
+     * sobrepago. Cerrada la venta manda el pago asentado, que es el que cuadra
+     * el cajón.
+     */
+    protected $appends = ['change'];
+
+    /** Lo que hay que devolver: lo cobrado de más sobre el total con propina. */
+    public function getChangeAttribute(): string
+    {
+        // En una devolución no hay vuelto: el dinero sale del cajón, no vuelve.
+        // Sin esta salvedad, una devolución sin pagar todavía mostraba como
+        // vuelto el importe entero —lo cobrado (cero) menos un total negativo—,
+        // que es exactamente lo contrario de lo que pasa.
+        if ($this->sale_type === 'refund') {
+            return '0.00';
+        }
+
+        $due = bcadd((string) ($this->total ?? '0'), (string) ($this->tip_amount ?? '0'), 2);
+        $over = bcsub((string) ($this->paid ?? '0'), $due, 2);
+
+        return bccomp($over, '0', 2) === 1 ? $over : '0.00';
+    }
+
     public function lines(): HasMany
     {
         return $this->hasMany(SaleLine::class)->orderBy('sequence');

@@ -61,12 +61,17 @@ class ReceiptRenderer
     /** @return array<int,array<string,mixed>> */
     private function text(array $block, array $context): array
     {
-        $content = $this->interpolate($block['content'] ?? '', $context);
+        $raw = (string) ($block['content'] ?? '');
+        $content = $this->interpolate($raw, $context);
 
         // Una línea que quedó vacía porque su dato no existe —el cliente
         // anónimo, la dirección sin cargar— no se imprime: dejaría un hueco que
         // parece un error de la impresora.
-        if (trim($content) === '' && ($block['hide_if_empty'] ?? true)) {
+        //
+        // Y tampoco se imprime la que **solo conserva su etiqueta**: un ticket
+        // que dice "RUC" y "Tel." sin nada al lado se lee como una impresora a
+        // medio andar, no como un negocio sin teléfono cargado.
+        if ($this->onlyLabelLeft($raw, $content) && ($block['hide_if_empty'] ?? true)) {
             return [];
         }
 
@@ -102,8 +107,93 @@ class ReceiptRenderer
         return $lines;
     }
 
-    /** @return array<int,array<string,mixed>> */
+    /**
+     * El detalle de productos, en dos formas.
+     *
+     * **`compact`** —la de fábrica— usa **una línea por producto** en tres
+     * columnas: descripción, cantidad e importe. En un rollo, cada producto que
+     * ocupa dos renglones en vez de uno es el doble de papel y el doble de
+     * tiempo de impresión; con veinte productos son veinte centímetros de más en
+     * cada ticket del día.
+     *
+     * **`detailed`** conserva el formato anterior: la descripción entera en su
+     * renglón y debajo "cantidad × precio unitario". Sirve cuando el precio
+     * unitario tiene que quedar impreso —ferretería, venta por peso— o cuando
+     * las descripciones son tan largas que truncarlas las vuelve irreconocibles.
+     *
+     * El descuento de línea sigue en su propio renglón en ambas: es la excepción,
+     * y esconderlo en una columna estrecha sería esconder justo lo que el cliente
+     * revisa.
+     */
     private function items(array $block, array $context, int $width): array
+    {
+        return ($block['layout'] ?? 'compact') === 'detailed'
+            ? $this->itemsDetailed($block, $context, $width)
+            : $this->itemsCompact($block, $context, $width);
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    private function itemsCompact(array $block, array $context, int $width): array
+    {
+        $lines = [];
+        $showDiscount = (bool) ($block['show_discount'] ?? true);
+        $showHeader = (bool) ($block['show_header'] ?? true);
+        $items = $context['items'] ?? [];
+
+        // Anchos de columna. El importe manda —es lo que el cliente revisa— y la
+        // descripción cede lo que haga falta: un nombre recortado se entiende,
+        // un importe recortado no sirve de nada.
+        $amountWidth = $width >= 40 ? 10 : 9;
+        $qtyWidth = $width >= 40 ? 7 : 5;
+        $descWidth = max(8, $width - $amountWidth - $qtyWidth - 2);
+
+        /** Tres celdas en sus columnas: el formato de la fila y el del encabezado. */
+        $row = fn (string $left, string $middle, string $right): string => sprintf(
+            '%s %s %s',
+            $this->pad(mb_substr($left, 0, $descWidth), $descWidth),
+            $this->pad(mb_substr($middle, 0, $qtyWidth), $qtyWidth, left: true),
+            $this->pad(mb_substr($right, 0, $amountWidth), $amountWidth, left: true)
+        );
+
+        // **Las columnas se rotulan.** Una raya sola no dice qué es cada número:
+        // el cliente que revisa su ticket tiene que poder saber, sin preguntar,
+        // cuál es la cantidad y cuál el importe. Cuesta un renglón por ticket, no
+        // uno por producto, que era el gasto que valía la pena recortar.
+        if ($showHeader && $items !== []) {
+            $lines[] = [
+                'kind' => 'item_header',
+                'text' => $row(__('receipt.item'), __('receipt.qty'), __('receipt.amount')),
+                'align' => 'left',
+                'bold' => true,
+                'size' => 'md',
+            ];
+        }
+
+        foreach ($items as $item) {
+            $description = mb_substr((string) $item['description'], 0, $descWidth);
+            $qty = mb_substr((string) $item['qty'], 0, $qtyWidth);
+
+            $lines[] = [
+                'kind' => 'item',
+                'text' => $row($description, $qty, (string) $item['total']),
+                'align' => 'left',
+                'bold' => false,
+                'size' => 'md',
+            ];
+
+            if ($showDiscount && bccomp($item['discount'], '0', 2) > 0) {
+                $lines[] = [
+                    'kind' => 'item_discount',
+                    'text' => $this->pair('  '.__('receipt.discount'), '-'.$item['discount'], $width),
+                ];
+            }
+        }
+
+        return $lines;
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    private function itemsDetailed(array $block, array $context, int $width): array
     {
         $lines = [];
         $showUnitPrice = (bool) ($block['show_unit_price'] ?? true);
@@ -268,6 +358,31 @@ class ReceiptRenderer
      *
      * @param  array<string,mixed>  $context
      */
+    /**
+     * ¿De la línea solo quedó el texto fijo?
+     *
+     * Verdadero cuando el bloque tenía marcadores y **todos** resolvieron a
+     * vacío. Distingue "RUC {{branch.tax_id}}" sin RUC cargado —que no se
+     * imprime— de una línea escrita a mano como "Gracias por su compra", que no
+     * tiene marcadores y siempre se imprime.
+     */
+    private function onlyLabelLeft(string $raw, string $rendered): bool
+    {
+        if (trim($rendered) === '') {
+            return true;
+        }
+
+        if (preg_match_all('/\{\{\s*(t:)?([a-z0-9_.]+)\s*\}\}/i', $raw, $matches) === 0) {
+            return false;
+        }
+
+        // Se quita del original todo lo que no sea marcador: lo que queda es la
+        // parte fija. Si lo dibujado es exactamente eso, ningún dato llegó.
+        $fixed = trim(preg_replace('/\{\{\s*(t:)?[a-z0-9_.]+\s*\}\}/i', '', $raw) ?? '');
+
+        return $fixed !== '' && trim($rendered) === $fixed;
+    }
+
     public function interpolate(string $template, array $context): string
     {
         return preg_replace_callback(
@@ -277,6 +392,21 @@ class ReceiptRenderer
                 : (string) (data_get($context, $matches[2]) ?? ''),
             $template
         ) ?? $template;
+    }
+
+    /**
+     * Rellena con espacios contando **caracteres**, no bytes.
+     *
+     * `str_pad` mide bytes y una "ñ" ocupa dos: con acentos, las columnas se
+     * desalinean justo en los productos de nombre español. `mb_str_pad` llegó en
+     * PHP 8.3 y el proyecto admite 8.2, así que se hace a mano.
+     */
+    private function pad(string $value, int $width, bool $left = false): string
+    {
+        $missing = max(0, $width - mb_strlen($value));
+        $spaces = str_repeat(' ', $missing);
+
+        return $left ? $spaces.$value : $value.$spaces;
     }
 
     /** Etiqueta a la izquierda, importe a la derecha, justificados al ancho. */

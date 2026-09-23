@@ -27,6 +27,12 @@ const alignOptions = computed(() =>
   (['left', 'center', 'right'] as const).map((value) => ({ label: t(`receipts.align.${value}`), value }))
 )
 
+/** Compacta ahorra papel; detallada deja impreso el precio unitario. */
+const layoutOptions = computed(() => [
+  { label: t('receipts.layoutCompact'), value: 'compact' },
+  { label: t('receipts.layoutDetailed'), value: 'detailed' }
+])
+
 const sizeOptions = computed(() => [
   { label: t('receipts.size.md'), value: 'md' },
   { label: t('receipts.size.sm'), value: 'sm' }
@@ -125,9 +131,34 @@ function removeField(index: number) {
     </template>
 
     <template v-else-if="block.type === 'items'">
-      <div class="flex flex-wrap gap-4">
-        <USwitch v-model="block.show_unit_price" :label="t('receipts.showUnitPrice')" />
-        <USwitch v-model="block.show_discount" :label="t('receipts.showDiscount')" />
+      <div class="flex flex-col gap-3">
+        <!-- Una línea por producto o dos. En un rollo, cada producto que ocupa
+             dos renglones es el doble de papel en cada ticket del día. -->
+        <UFormField :label="t('receipts.itemsLayout')" :hint="t('receipts.itemsLayoutHint')">
+          <USelect
+            :model-value="block.layout ?? 'compact'"
+            :items="layoutOptions"
+            class="w-64"
+            @update:model-value="block = { ...block, layout: $event as 'compact' | 'detailed' }"
+          />
+        </UFormField>
+
+        <div class="flex flex-wrap gap-4">
+          <USwitch
+            v-if="(block.layout ?? 'compact') === 'detailed'"
+            v-model="block.show_unit_price"
+            :label="t('receipts.showUnitPrice')"
+          />
+          <!-- Una raya sola no dice qué es cada número: sin rótulos, el cliente
+               no sabe cuál columna es la cantidad y cuál el importe. -->
+          <USwitch
+            v-if="(block.layout ?? 'compact') === 'compact'"
+            :model-value="block.show_header ?? true"
+            :label="t('receipts.showHeader')"
+            @update:model-value="block = { ...block, show_header: $event }"
+          />
+          <USwitch v-model="block.show_discount" :label="t('receipts.showDiscount')" />
+        </div>
       </div>
     </template>
 

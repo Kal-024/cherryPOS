@@ -54,6 +54,9 @@ const MULTIPLIER = /^(\d+(?:[.,]\d+)?)\s*[*xX]\s*(.*)$/
 /** Cantidad armada esperando producto. Se muestra como ×3 junto al campo. */
 const pendingQty = ref('')
 
+/** Mientras se espera al catálogo: el campo se bloquea y lo dice. */
+const waiting = ref(false)
+
 /** Lo que se busca de verdad: el término sin el multiplicador. */
 const query = computed(() => {
   const match = MULTIPLIER.exec(term.value)
@@ -62,6 +65,16 @@ const query = computed(() => {
 })
 
 const results = computed(() => catalog.search(query.value, 8))
+
+/**
+ * El catálogo todavía está en camino.
+ *
+ * La caja arranca con la caché vacía y lo baja en segundo plano. Hasta que
+ * llega, la búsqueda local no encuentra nada — y decir "no existe" en ese rato
+ * es mentir: el producto está, solo que todavía no acá. En una caja esa mentira
+ * termina con el cajero diciéndole al cliente que no hay algo que sí hay.
+ */
+const warming = computed(() => catalog.count.value === 0)
 
 /**
  * La cantidad que le toca a la línea que entre ahora.
@@ -123,6 +136,28 @@ function submit() {
   if (raw === '') return
 
   const qty = takeQty()
+
+  void resolve(raw, qty)
+}
+
+/**
+ * Resuelve lo tecleado, esperando al catálogo si hace falta.
+ *
+ * Sin catálogo local no hay con qué comparar, así que antes de dar nada por
+ * inexistente se espera la bajada en curso. Con la caché ya llena esto no cuesta
+ * nada: devuelve de inmediato.
+ */
+async function resolve(raw: string, qty: string) {
+  if (warming.value) {
+    waiting.value = true
+
+    try {
+      await catalog.whenReady()
+    } finally {
+      waiting.value = false
+    }
+  }
+
   const scanned = catalog.byBarcode(raw)
 
   if (scanned) {
@@ -132,7 +167,9 @@ function submit() {
     return
   }
 
-  const chosen = results.value[highlighted.value]
+  // Se vuelve a mirar la lista: si el catálogo acaba de llegar, la coincidencia
+  // que faltaba ya está.
+  const chosen = results.value[highlighted.value] ?? catalog.search(raw, 1)[0]
 
   if (chosen) {
     emit('pick', chosen, qty)
@@ -190,6 +227,7 @@ defineExpose({ focus, reset, isEmpty: () => term.value.length === 0 })
       autofocus
       autocomplete="off"
       :disabled="props.disabled"
+      :loading="waiting"
       class="w-full"
       @keydown.enter.prevent="submit"
       @keydown.down.prevent="move(1)"
@@ -231,6 +269,14 @@ defineExpose({ focus, reset, isEmpty: () => term.value.length === 0 })
         <span class="pos-amount shrink-0 font-medium">{{ amount(product.price) }}</span>
       </button>
     </div>
+
+    <!-- Cargando no es lo mismo que no existe, y la pantalla lo distingue. -->
+    <p
+      v-else-if="warming && term.length > 0"
+      class="absolute inset-x-0 top-full z-20 mt-1 rounded-lg border border-default bg-default px-3 py-2 text-sm text-muted shadow-lg"
+    >
+      {{ t('sale.catalogWarming') }}
+    </p>
 
     <p
       v-else-if="term.length > 1"

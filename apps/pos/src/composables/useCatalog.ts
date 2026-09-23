@@ -58,6 +58,17 @@ const products = shallowRef<CatalogProduct[]>([])
 const usage = ref<Record<string, number>>({})
 const syncing = ref(false)
 const syncedAt = ref<string | null>(null)
+
+/**
+ * La bajada en curso, para poder esperarla.
+ *
+ * La caja arranca con el catálogo vacío y lo baja en segundo plano. Durante ese
+ * rato la búsqueda local no encuentra nada, y lo que el cajero veía era **"no
+ * hay ningún producto con ese código"** — una mentira, porque el producto existe
+ * y solo está en camino. Con la promesa a mano, quien busca puede esperar a que
+ * llegue en vez de recibir una negativa falsa.
+ */
+let pendingSync: Promise<boolean> | null = null
 const loaded = ref(false)
 
 /** Índice de búsqueda: texto normalizado por producto, calculado una vez. */
@@ -129,10 +140,16 @@ export function useCatalog() {
    * tirar la red abajo por nada.
    */
   async function sync(): Promise<boolean> {
-    if (syncing.value) return false
+    // Una sola bajada a la vez, y quien llegue mientras tanto espera la misma.
+    if (pendingSync) return pendingSync
 
     syncing.value = true
+    pendingSync = run()
 
+    return pendingSync
+  }
+
+  async function run(): Promise<boolean> {
     try {
       const items = await apiFetch<CatalogProduct[]>('/catalog/products?limit=10000')
 
@@ -166,7 +183,24 @@ export function useCatalog() {
       return false
     } finally {
       syncing.value = false
+      pendingSync = null
     }
+  }
+
+  /**
+   * Espera a tener catálogo con el que responder.
+   *
+   * Devuelve en cuanto hay productos en memoria. Si todavía no llegaron, espera
+   * la bajada en curso —o la arranca— antes de contestar. Es la diferencia entre
+   * "todavía no lo tengo" y "no existe", que para un cajero con un cliente
+   * delante no es un matiz.
+   */
+  async function whenReady(): Promise<void> {
+    await ready()
+
+    if (products.value.length > 0) return
+
+    await (pendingSync ?? sync())
   }
 
   /**
@@ -248,6 +282,7 @@ export function useCatalog() {
     loaded,
     ready,
     sync,
+    whenReady,
     search,
     byBarcode,
     byId,

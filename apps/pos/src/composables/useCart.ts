@@ -74,6 +74,8 @@ export interface Sale {
   tip_amount: string
   paid: string
   balance: string
+  /** Lo que hay que devolver. Lo calcula el servidor, como todo importe. */
+  change?: string
   customer_id: string | null
   /** Cuenta de salón (F1-B): la mesa que ocupa esta venta suspendida. */
   dining_table_id?: string | null
@@ -205,10 +207,24 @@ export function useCart() {
   const isOpen = computed(() => sale.value !== null && sale.value.status !== 'completed')
   const lines = computed(() => sale.value?.lines ?? [])
   const payments = computed(() => (sale.value?.payments ?? []).filter((p) => !p.is_change))
+  /**
+   * El vuelto, visible **mientras** se cobra.
+   *
+   * La fila `is_change` la crea el servidor al cerrar, así que con conexión
+   * valía cero durante todo el cobro y el renglón no se dibujaba nunca: el
+   * cajero cerraba la venta sin que nada le dijera cuánto devolver. Sin
+   * conexión sí aparecía, porque el motor local lo inyecta en cada refresco, y
+   * esa diferencia hacía que el comportamiento pareciera caprichoso.
+   *
+   * Ahora la venta lo trae siempre. La fila asentada sigue mandando una vez
+   * cerrada: es la que cuadra el cajón.
+   */
   const change = computed(() => {
     const entry = (sale.value?.payments ?? []).find((p) => p.is_change)
 
-    return entry ? entry.amount.replace('-', '') : '0.00'
+    if (entry) return entry.amount.replace('-', '')
+
+    return sale.value?.change ?? '0.00'
   })
 
   function adopt(next: Sale | null) {
@@ -292,6 +308,32 @@ export function useCart() {
       await refresh()
 
       return result.lines
+    } catch (err) {
+      lastError.value = firstApiErrorMessage(err)
+      throw err
+    } finally {
+      busy.value = false
+    }
+  }
+
+  /**
+   * A quién se le vende.
+   *
+   * Cambia el impuesto si el cliente está exonerado (Q-07), así que el servidor
+   * recalcula la venta entera y acá se adopta el resultado: calcularlo en el
+   * terminal abriría una tercera implementación de las fórmulas.
+   */
+  async function setCustomer(customerId: string | null) {
+    if (!sale.value) return
+
+    busy.value = true
+    lastError.value = ''
+
+    try {
+      adopt(await apiFetch<Sale>(`/sales/${sale.value.id}/customer`, {
+        method: 'POST',
+        body: JSON.stringify({ customer_id: customerId })
+      }))
     } catch (err) {
       lastError.value = firstApiErrorMessage(err)
       throw err
@@ -647,6 +689,16 @@ export function useCart() {
     ensure,
     addLine,
     updateLine,
+    setCustomer,
+    /**
+     * Toma una venta ya abierta por otro camino.
+     *
+     * Lo usa la devolución: el diálogo abre la venta con su ticket original y
+     * sus líneas, y de ahí en adelante es el carrito de siempre. Una sola forma
+     * de cobrar y cerrar es lo que hace que una devolución cuadre igual que un
+     * ticket.
+     */
+    adopt,
     setQty,
     bumpQty,
     removeLine,

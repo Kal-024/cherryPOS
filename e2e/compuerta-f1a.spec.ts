@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { activateTerminal } from './support/terminal'
 
 /**
  * La compuerta de cierre de F1-A (§8 del plan), desde el navegador.
@@ -30,19 +31,14 @@ const BARCODES = {
   arrozExento: '7506666666666'
 }
 
-async function activateTerminal(page: Page) {
+async function activate(page: Page) {
   await page.goto('/')
 
   // Sin terminal activada, el guardia de ruta no deja ir a ningún otro lado
   // (D-05): eso mismo se verifica al llegar acá sin pedirlo.
   await expect(page).toHaveURL(/\/terminal$/)
 
-  await page.getByLabel('Código de sucursal').fill(TERMINAL.branch)
-  await page.getByLabel('Código de terminal').fill(TERMINAL.terminal)
-  await page.getByLabel('Secreto de la terminal').fill(TERMINAL.secret)
-  await page.getByRole('button', { name: 'Activar terminal' }).click()
-
-  await expect(page).not.toHaveURL(/\/terminal$/)
+  await activateTerminal(page, TERMINAL)
 }
 
 /**
@@ -112,7 +108,7 @@ test.describe('Compuerta de cierre de F1-A', () => {
 
   test.beforeAll(async ({ browser }) => {
     page = await browser.newPage()
-    await activateTerminal(page)
+    await activate(page)
     await signIn(page)
   })
 
@@ -155,6 +151,84 @@ test.describe('Compuerta de cierre de F1-A', () => {
 
     // La gaveta se abre a mano mientras no exista el agente de impresión (Q-12).
     await expect(page.getByText('Todavía no hay agente de impresión')).toBeVisible()
+  })
+
+  test('3b · emitir el comprobante de la venta recién cerrada', async () => {
+
+    // El paso 6 del guion. Estuvo probado solo contra la API durante un tiempo:
+    // el servidor generaba el PDF y la pantalla no lo pedía, así que el cajero
+    // cerraba ventas sin ver el comprobante y nadie lo notaba.
+    const [pdf] = await Promise.all([
+      page.waitForResponse((res) => res.url().includes('/receipt/pdf')),
+      page.waitForEvent('popup'),
+      page.getByRole('button', { name: 'Ver comprobante' }).click()
+    ])
+
+    expect(pdf.status()).toBe(200)
+    expect(pdf.headers()['content-type']).toContain('application/pdf')
+
+    // Y el foco vuelve solo a la búsqueda: el cajero no toca el ratón.
+    await expect(page.getByPlaceholder('Buscar producto o escanear código')).toBeFocused()
+  })
+
+  test('3c · cobrar con un billete de más muestra el vuelto', async () => {
+
+    await scan(page, BARCODES.gaseosa)
+    await page.getByRole('button', { name: /^Cobrar/ }).click()
+
+    // 500 sobre 45. Hasta que el vuelto viajó con la venta, el cajero **nunca**
+    // lo veía con servidor: la fila de vuelto la crea el cierre, así que
+    // mientras cobraba valía cero y el renglón no llegaba a dibujarse.
+    await page.getByPlaceholder('Monto recibido').fill('500')
+    await page.getByPlaceholder('Monto recibido').press('Enter')
+
+    await expect(page.getByText('Vuelto').first()).toBeVisible()
+    await expect(page.getByText('455.00').first()).toBeVisible()
+
+    await page.getByRole('button', { name: 'Cerrar venta' }).click()
+    await expect(page.getByText(/Venta .* cerrada/)).toBeVisible()
+
+    // El aviso aparece antes de que el carrito termine de vaciarse: sin esperar
+    // acá, el paso siguiente cuenta las líneas de esta venta.
+    await expectEmptyCart(page)
+  })
+
+  test('3d · devolución parcial contra el ticket original', async () => {
+
+    // **El paso 5 del guion de cierre de F1-A**, que hasta ahora no recorría
+    // ninguna prueba: la devolución existía en la API y no tenía pantalla, así
+    // que el paso se daba por bueno sin que nadie lo hiciera desde la caja.
+    await page.getByRole('button', { name: 'Devolución' }).click()
+
+    // Sin ticket original no se empieza: el ERP rechaza la nota de crédito sin
+    // documento, y esa respuesta llega cuando el dinero ya salió del cajón.
+    await expect(page.getByText('Sin el ticket original no se puede devolver')).toBeVisible()
+
+    await page.getByPlaceholder(/^Ej\./).fill('COU')
+    await page.getByRole('button', { name: 'Buscar' }).click()
+
+    // Con varios tickets del día se elige uno. Hay que esperar a que la lista
+    // llegue: preguntar si está visible antes de tiempo devuelve "no" y el
+    // guion sigue sin haber elegido nada.
+    const matches = page.getByRole('button', { name: /^001-COU/ })
+    await expect(matches.first()).toBeVisible()
+    await matches.first().click()
+
+    await expect(page.getByText('Por devolver')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Devolver todo' }).click()
+    await page.getByRole('button', { name: 'Armar la devolución' }).click()
+
+    // La devolución pasa a ser el carrito, y se cobra con el panel de siempre.
+    await expect(page.getByText('Estás devolviendo')).toBeVisible()
+
+    await page.getByRole('button', { name: /^Cobrar/ }).click()
+    await page.getByRole('button', { name: /^Exacto/ }).click()
+    await page.getByRole('button', { name: 'Cerrar venta' }).click()
+
+    // Serie propia: una devolución no consume el correlativo de las ventas.
+    await expect(page.getByText(/Venta 001-REF.* cerrada/)).toBeVisible()
+    await expectEmptyCart(page)
   })
 
   test('4 · suspender una venta, atender otra y retomarla', async () => {

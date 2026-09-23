@@ -94,6 +94,10 @@ export function useTerminal() {
       // terminal sin red quedaría atrapada con una sesión que no puede cerrar.
     }
 
+    // Primero se apaga el reintento: la credencial se está borrando y seguir
+    // mandando tickets de la terminal que se abandona solo produce rechazos.
+    useOffline().stopAutoFlush()
+
     terminalToken.clear()
     operatorSession.clear()
     terminal.value = null

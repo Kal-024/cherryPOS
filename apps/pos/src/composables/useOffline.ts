@@ -1,6 +1,7 @@
-import { computed, ref, shallowRef } from 'vue'
+import { computed, effectScope, ref, shallowRef, watch, type EffectScope } from 'vue'
 import { calculateSale, type SaleInput, type SaleResult, type TaxRate } from '@cherrypos/calc'
 import { apiFetch, isApiError } from './httpClient'
+import { useSync } from './useSync'
 import { STORES, entries, get, put, remove } from '../db/idb'
 import { activeTerminalId, belongsTo, ownerOf, scoped, terminalPrefix } from '../db/scope'
 import { uuid7 } from '../utils/uuid'
@@ -162,6 +163,164 @@ async function loadFromDisk() {
   pending.value = queued
     .filter(([key]) => key.includes(OUTBOX_PREFIX) && (terminal === null || belongsTo(key, terminal)))
     .map(([, ticket]) => ticket)
+}
+
+/**
+ * Manda lo pendiente.
+ *
+ * El 200 del duplicado es éxito: el terminal reintenta por diseño y el servidor
+ * responde lo mismo que la primera vez.
+ *
+ * **Tres desenlaces, y conviene no confundirlos.** Un 422 es del ticket: no va a
+ * pasar nunca, se anota y se deja para el supervisor. Un 401, un 423 o un 429 no
+ * son del ticket sino de la sesión o del ritmo —la credencial de terminal dura un
+ * día y vence cada mañana—, así que se corta la vuelta sin tocarlo: marcarlo
+ * mandaría a la bandeja algo que se arregla volviendo a identificarse. Un fallo
+ * de red corta igual y se reintenta después.
+ *
+ * Los ya rechazados no se vuelven a mandar en cada vuelta: insistir contra un
+ * ticket que nunca va a pasar retrasa los que sí, y con el reintento automático
+ * encendido sería una petición fallida cada minuto para siempre.
+ */
+async function flushQueue(): Promise<{ sent: number, failed: number }> {
+  if (flushing.value || pending.value.length === 0) return { sent: 0, failed: 0 }
+
+  flushing.value = true
+  let sent = 0
+  let failed = 0
+
+  try {
+    for (const ticket of [...pending.value]) {
+      if (ticket.last_error !== null) continue
+
+      try {
+        await apiFetch('/offline-sales', {
+          method: 'POST',
+          body: JSON.stringify(ticket)
+        })
+
+        await remove(STORES.carts, outboxKey(ticket.id))
+        pending.value = pending.value.filter((entry) => entry.id !== ticket.id)
+        sent++
+      } catch (err) {
+        failed++
+
+        // La sesión venció, la terminal quedó bloqueada o el servidor pide bajar
+        // el ritmo. No es culpa del ticket: se espera y se vuelve.
+        if (isApiError(err) && (err.status === 401 || err.status === 423 || err.status === 429)) break
+
+        if (isApiError(err) && err.status >= 400 && err.status < 500) {
+          // Va a la bandeja de excepciones del supervisor: reintentar no lo
+          // arregla y frena la cola.
+          ticket.last_error = err.message
+          ticket.attempts += 1
+          await put(STORES.carts, outboxKey(ticket.id), ticket)
+
+          continue
+        }
+
+        // Red caída: se corta la vuelta y se reintenta después.
+        break
+      }
+    }
+  } finally {
+    flushing.value = false
+  }
+
+  return { sent, failed }
+}
+
+/**
+ * El reintento es del módulo, no de la pantalla (H6.2).
+ *
+ * Estuvo colgado del ciclo de vida de la caja, y eso dejaba un agujero con forma
+ * de restaurante: el mesero cierra un ticket sin red desde el salón, se va a otra
+ * mesa, y ese dinero no sale del equipo hasta que alguien abra la pantalla de
+ * venta. Nadie ve nada raro — la caja de al lado factura normal.
+ *
+ * Quien avisa es el sondeo: es el único que sabe si el servidor **de la
+ * sucursal** contesta, porque la red del navegador puede estar perfecta y el
+ * equipo del fondo apagado. Encima va un reintento propio con retroceso, para lo
+ * que el sondeo no cubre: la aplicación que arranca con tickets de ayer, o el
+ * envío que se cortó a la mitad sin que la conexión llegara a caerse.
+ */
+const RETRY_MS = [5000, 15000, 30000, 60000]
+
+let autoScope: EffectScope | null = null
+let retryTimer: ReturnType<typeof setTimeout> | null = null
+let retryFailures = 0
+
+function cancelRetry(): void {
+  if (retryTimer !== null) {
+    clearTimeout(retryTimer)
+    retryTimer = null
+  }
+}
+
+function scheduleRetry(): void {
+  if (retryTimer !== null) return
+
+  const delay = RETRY_MS[Math.min(retryFailures, RETRY_MS.length - 1)] ?? 60000
+  retryFailures += 1
+
+  retryTimer = setTimeout(() => {
+    retryTimer = null
+    void attemptFlush()
+  }, delay)
+}
+
+/** Una vuelta: si quedó algo enviable, se agenda la siguiente. */
+async function attemptFlush(): Promise<void> {
+  cancelRetry()
+
+  const enviables = () => pending.value.some((ticket) => ticket.last_error === null)
+
+  if (!enviables()) {
+    retryFailures = 0
+
+    return
+  }
+
+  await flushQueue()
+
+  if (enviables()) {
+    scheduleRetry()
+  } else {
+    retryFailures = 0
+  }
+}
+
+/**
+ * Enciende el reintento automático. Idempotente: lo llaman todas las pantallas
+ * que pueden tener tickets esperando, y solo la primera lo arranca.
+ */
+function startAutoFlush(): void {
+  if (autoScope !== null) return
+
+  // Scope propio y desprendido: el reintento vive mientras viva la aplicación,
+  // no mientras viva el componente que lo encendió — que es justo el error que
+  // se está corrigiendo.
+  autoScope = effectScope(true)
+
+  autoScope.run(() => {
+    const { reachable } = useSync()
+
+    watch(reachable, (up) => {
+      if (up) void attemptFlush()
+    })
+  })
+
+  // Al arrancar puede haber quedado algo de ayer: el equipo se apagó con la
+  // bandeja llena y nadie tocó nada desde entonces.
+  void attemptFlush()
+}
+
+/** Se apaga al cambiar de terminal o cerrar sesión: lo guardado es de su dueño. */
+function stopAutoFlush(): void {
+  autoScope?.stop()
+  autoScope = null
+  cancelRetry()
+  retryFailures = 0
 }
 
 export function useOffline() {
@@ -416,6 +575,11 @@ export function useOffline() {
     await put(STORES.carts, outboxKey(ticket.id), ticket)
     pending.value = [...pending.value, ticket]
 
+    // Queda agendado desde ya. Sin red el intento falla y retrocede, que es lo
+    // correcto: lo que no puede pasar es que el ticket espere a que alguien
+    // vuelva a abrir la caja.
+    scheduleRetry()
+
     // El número se consume localmente: si el navegador se cierra antes de
     // sincronizar, el siguiente ticket no puede repetirlo.
     if (reservation.value) {
@@ -429,55 +593,6 @@ export function useOffline() {
     }
 
     return ticket
-  }
-
-  /**
-   * Manda lo pendiente.
-   *
-   * El 200 del duplicado es éxito: el terminal reintenta por diseño y el
-   * servidor responde lo mismo que la primera vez. Un 422 no se reintenta —
-   * insistir contra un ticket que nunca va a pasar retrasa los que sí.
-   */
-  async function flush(): Promise<{ sent: number, failed: number }> {
-    if (flushing.value || pending.value.length === 0) return { sent: 0, failed: 0 }
-
-    flushing.value = true
-    let sent = 0
-    let failed = 0
-
-    try {
-      for (const ticket of [...pending.value]) {
-        try {
-          await apiFetch('/offline-sales', {
-            method: 'POST',
-            body: JSON.stringify(ticket)
-          })
-
-          await remove(STORES.carts, outboxKey(ticket.id))
-          pending.value = pending.value.filter((entry) => entry.id !== ticket.id)
-          sent++
-        } catch (err) {
-          failed++
-
-          if (isApiError(err) && err.status >= 400 && err.status < 500) {
-            // Va a la bandeja de excepciones del supervisor: reintentar no lo
-            // arregla y frena la cola.
-            ticket.last_error = err.message
-            ticket.attempts += 1
-            await put(STORES.carts, outboxKey(ticket.id), ticket)
-
-            continue
-          }
-
-          // Red caída: se corta la vuelta y se reintenta después.
-          break
-        }
-      }
-    } finally {
-      flushing.value = false
-    }
-
-    return { sent, failed }
   }
 
   return {
@@ -496,6 +611,8 @@ export function useOffline() {
     pendingByTerminal,
     adoptLegacy,
     closeOffline,
-    flush
+    flush: flushQueue,
+    startAutoFlush,
+    stopAutoFlush
   }
 }

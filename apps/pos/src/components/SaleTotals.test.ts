@@ -61,6 +61,37 @@ describe('SaleTotals', () => {
     expect(wrapper.find('.pos-total').text()).toContain('126.50')
   })
 
+  it('con vuelto, el número grande es el vuelto', () => {
+    // Un billete de 500 sobre 115. Lo que el cajero necesita leer de lejos ya no
+    // es lo que falta cobrar sino lo que tiene que devolver: dejarlo en letra
+    // chica obligaba a buscarlo con el cliente esperando la mano.
+    const wrapper = mount(SaleTotals, {
+      props: { sale: sale({ paid: '500.00', balance: '0.00', change: '385.00' }) }
+    })
+
+    expect(wrapper.text()).toContain('Vuelto')
+    expect(wrapper.find('.pos-total').text()).toContain('385.00')
+  })
+
+  it('sin vuelto el número grande sigue siendo el total', () => {
+    const wrapper = mount(SaleTotals, {
+      props: { sale: sale({ paid: '100.00', balance: '15.00', change: '0.00' }) }
+    })
+
+    expect(wrapper.text()).not.toContain('Vuelto')
+    expect(wrapper.find('.pos-total').text()).toContain('115.00')
+  })
+
+  it('con vuelto y propina el vuelto manda, y hay un solo número grande', () => {
+    const wrapper = mount(SaleTotals, {
+      props: { sale: sale({ tip_amount: '11.50', paid: '200.00', balance: '0.00', change: '73.50' }) }
+    })
+
+    // Dos números grandes compitiendo serían peores que ninguno.
+    expect(wrapper.findAll('.pos-total')).toHaveLength(1)
+    expect(wrapper.find('.pos-total').text()).toContain('73.50')
+  })
+
   it('sin descuento no muestra la línea de descuento', () => {
     const wrapper = mount(SaleTotals, { props: { sale: sale() } })
 

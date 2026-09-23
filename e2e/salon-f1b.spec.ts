@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { activateTerminal, addByName } from './support/terminal'
 
 /**
  * El salón, de punta a punta (F1-B).
@@ -26,12 +27,7 @@ async function signIn(page: Page, terminal = TERMINAL.terminal) {
   // Cada prueba arranca con un navegador limpio: la terminal se activa de nuevo
   // y el guardia de ruta manda al PIN (D-05).
   await expect(page).toHaveURL(/\/terminal$/)
-  await page.getByLabel('Código de sucursal').fill(TERMINAL.branch)
-  await page.getByLabel('Código de terminal').fill(terminal)
-  await page.getByLabel('Secreto de la terminal').fill(TERMINAL.secret)
-  await page.getByRole('button', { name: 'Activar terminal' }).click()
-
-  await expect(page).not.toHaveURL(/\/terminal$/)
+  await activateTerminal(page, { ...TERMINAL, terminal })
 
   // La sesión del cajero es de la terminal y vive en el servidor: si sigue
   // abierta, la caja entra directamente (D-05).
@@ -103,9 +99,7 @@ test.describe('Salón y cocina', () => {
     await expect(page).toHaveURL(/\/$/)
     await expect(page.getByRole('button', { name: /Mandar a cocina/ })).toBeVisible()
 
-    const search = page.getByPlaceholder('Buscar producto o escanear código')
-    await search.fill('Lomo')
-    await search.press('Enter')
+    await addByName(page, 'Lomo')
 
     // Descubrir el obligatorio después mandaría al mesero de vuelta a la mesa.
     await expect(page.getByText('Falta responder: Término')).toBeVisible()
@@ -129,6 +123,48 @@ test.describe('Salón y cocina', () => {
     await expect(page.getByRole('button', { name: /Mesa 1/ })).toContainText('395.00')
   })
 
+  test('3b · volver a la mesa ya atendida la vuelve a abrir', async () => {
+    await page.goto('/salon')
+
+    // **Acá estaba el fallo.** La cuenta quedó en `draft` al entrar a la caja y
+    // nada la re-suspende al salir, pero el mapa la sigue dando por ocupada. Con
+    // `resume()` aceptando solo suspendidas, este segundo toque respondía "esta
+    // venta no está suspendida" y dejaba la mesa ocupada e intocable: el mesero
+    // veía el plato en cocina y no podía agregarle la bebida.
+    await page.getByRole('button', { name: /Mesa 1/ }).click()
+
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByText('395.00').first()).toBeVisible()
+    await expect(page.getByText('no está suspendida')).toHaveCount(0)
+  })
+
+  test('3c · unir dos mesas arrastrando una sobre otra', async () => {
+    await page.goto('/salon')
+
+    // El camino anterior elegía la mesa principal **por su cuenta** —la primera
+    // libre del área— y solo dejaba marcar cuáles se le sumaban: nadie entendía
+    // cuál mandaba. Juntar mesas es un gesto físico, y acá es el mismo gesto.
+    const origen = page.locator('[data-table-id]').filter({ hasText: 'Mesa 3' })
+    const destino = page.locator('[data-table-id]').filter({ hasText: 'Mesa 4' })
+
+    const desde = await origen.boundingBox()
+    const hasta = await destino.boundingBox()
+
+    await page.mouse.move((desde?.x ?? 0) + 40, (desde?.y ?? 0) + 40)
+    await page.mouse.down()
+    await page.mouse.move((hasta?.x ?? 0) + 30, (hasta?.y ?? 0) + 30, { steps: 8 })
+    await page.mouse.move((hasta?.x ?? 0) + 50, (hasta?.y ?? 0) + 50, { steps: 4 })
+    await page.mouse.up()
+
+    // El aviso aparece dos veces en el árbol: el título visible y el anuncio
+    // que lee el lector de pantalla.
+    await expect(page.getByText('Mesas unidas').first()).toBeVisible()
+
+    // Unidas se dibujan pegadas: dos mesas que comparten cuenta y siguen cada
+    // una en su rincón no se leen como una sola unidad.
+    await expect(page.getByRole('button', { name: /Separar/ })).toBeVisible()
+  })
+
   test('4 · los cursos: el postre se pide ya y sale después', async ({ browser }) => {
     // La terminal del salón es la que sirve por tiempos: en el mostrador la
     // columna de curso no existe porque una pulpería no sirve por cursos. Es la
@@ -143,14 +179,9 @@ test.describe('Salón y cocina', () => {
     await page.getByRole('button', { name: 'Abrir cuenta' }).click()
     await expect(page).toHaveURL(/\/$/)
 
-    const search = page.getByPlaceholder('Buscar producto o escanear código')
-
     // La cerveza sale ya —la prepara la barra— y el postre espera.
-    await search.fill('Cerveza')
-    await search.press('Enter')
-
-    await search.fill('Tres leches')
-    await search.press('Enter')
+    await addByName(page, 'Cerveza')
+    await addByName(page, 'Tres leches')
 
     // El postre se pide con el resto y se marca para después: volver a la mesa a
     // pedirlo sería perder los veinte minutos que tarda.

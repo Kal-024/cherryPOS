@@ -36,6 +36,10 @@ export interface TemplateBlock {
   lines?: number
   fields?: { label: string, value: string }[]
   show?: string[]
+  /** `compact` pone cada producto en una línea de tres columnas; `detailed`, en dos. */
+  layout?: 'compact' | 'detailed'
+  /** Rótulos sobre las columnas del detalle compacto. */
+  show_header?: boolean
   show_unit_price?: boolean
   show_discount?: boolean
   show_change?: boolean
@@ -58,11 +62,31 @@ export interface ReceiptTemplate {
   is_active: boolean
 }
 
+/**
+ * Una línea ya renderizada por el servidor.
+ *
+ * `text` no es todo lo que hay: la alineación, la negrita y el tamaño viajan
+ * aparte porque el agente de impresión los traducirá a comandos ESC/POS y no a
+ * espacios. El logo, el separador y el espaciador **no traen `text`** — son
+ * marcas de qué dibujar ahí.
+ */
+export interface PreviewLine {
+  kind?: string
+  text?: string
+  align?: string
+  bold?: boolean
+  size?: string
+  /** Con qué carácter se dibuja la raya del separador. */
+  char?: string
+  /** Contenido del código QR, que hoy se muestra como texto. */
+  value?: string
+}
+
 export interface Preview {
   paper: Paper
   /** Caracteres por línea. Manda sobre todo el diseño del ticket. */
   width: number
-  lines: { text: string, align?: string, bold?: boolean, size?: string }[]
+  lines: PreviewLine[]
 }
 
 /** Anchos en caracteres, iguales a `ReceiptTemplate::WIDTHS` del servidor. */
@@ -164,6 +188,33 @@ export function useReceiptTemplates() {
     }
   }
 
+  /**
+   * Borra una copia de la sucursal.
+   *
+   * Las del sistema y la que está en uso las rechaza el servidor: quedarse sin
+   * plantilla predeterminada deja la caja sin poder emitir, y eso se descubre
+   * con un cliente delante.
+   */
+  async function remove(id: string): Promise<void> {
+    saving.value = true
+
+    try {
+      await apiFetch(`/receipt-templates/${id}`, { method: 'DELETE' })
+    } finally {
+      saving.value = false
+    }
+  }
+
+  /**
+   * Declara cuál se imprime.
+   *
+   * El servidor desmarca las demás del mismo tipo y sucursal, y enciende esta:
+   * predeterminada apagada sería volver a no saber qué se está imprimiendo.
+   */
+  async function makeDefault(id: string): Promise<ReceiptTemplate> {
+    return update(id, { is_default: true })
+  }
+
   /** Vista previa con datos de ejemplo. Sin esto el editor no sirve. */
   async function preview(content: { blocks: TemplateBlock[] }, paper: Paper): Promise<Preview> {
     return apiFetch<Preview>('/receipt-templates/preview', {
@@ -172,5 +223,5 @@ export function useReceiptTemplates() {
     })
   }
 
-  return { templates, loading, saving, list, find, update, duplicate, preview }
+  return { templates, loading, saving, list, find, update, remove, makeDefault, duplicate, preview }
 }

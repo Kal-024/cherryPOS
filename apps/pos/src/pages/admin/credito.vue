@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { firstApiErrorMessage } from '../../composables/httpClient'
 import { type CreditAccountRow, useCredit } from '../../composables/useCredit'
@@ -19,19 +19,34 @@ const { t } = useI18n()
 const credit = useCredit()
 const toast = useToast()
 
-const withBalanceOnly = ref(true)
-const blockedOnly = ref(false)
+/**
+ * Un filtro, no dos interruptores.
+ *
+ * Eran dos `USwitch` independientes y el servidor los encadena con `AND`: con
+ * los dos encendidos la lista mostraba cuentas bloqueadas **y** con saldo, que
+ * no es lo que promete un rótulo que empieza con "Solo". Dos opciones que se
+ * excluyen se piden con un control que las excluya.
+ */
+type CreditFilter = 'all' | 'with_balance' | 'blocked'
+
+const filter = ref<CreditFilter>('with_balance')
 const selected = ref<CreditAccountRow | null>(null)
+
+const filterOptions = computed(() => [
+  { label: t('credit.filterAll'), value: 'all' },
+  { label: t('credit.withBalanceOnly'), value: 'with_balance' },
+  { label: t('credit.blockedOnly'), value: 'blocked' }
+])
 
 onMounted(refresh)
 
-watch([withBalanceOnly, blockedOnly], refresh)
+watch(filter, refresh)
 
 async function refresh() {
   try {
     await credit.list({
-      withBalanceOnly: withBalanceOnly.value,
-      blockedOnly: blockedOnly.value
+      withBalanceOnly: filter.value === 'with_balance',
+      blockedOnly: filter.value === 'blocked'
     })
   } catch (err) {
     toast.add({ title: firstApiErrorMessage(err), color: 'error' })
@@ -42,8 +57,11 @@ async function refresh() {
 <template>
   <div class="flex flex-col gap-3">
     <div class="flex flex-wrap items-center gap-4">
-      <USwitch v-model="withBalanceOnly" :label="t('credit.withBalanceOnly')" />
-      <USwitch v-model="blockedOnly" :label="t('credit.blockedOnly')" />
+      <URadioGroup
+        v-model="filter"
+        :items="filterOptions"
+        orientation="horizontal"
+      />
     </div>
 
     <div

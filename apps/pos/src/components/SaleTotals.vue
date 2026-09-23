@@ -31,6 +31,21 @@ const hasTip = computed(() => Number(props.sale?.tip_amount ?? 0) !== 0)
 const amountDue = computed(() =>
   amount((Number(props.sale?.total ?? 0) + Number(props.sale?.tip_amount ?? 0)).toFixed(2))
 )
+
+/**
+ * Cuando hay vuelto, el número grande **es el vuelto**.
+ *
+ * Lo que el cajero necesita leer de un vistazo cambia con el momento: antes de
+ * cobrar es cuánto pedir, y en cuanto el cliente entrega un billete de más pasa
+ * a ser cuánto devolver. Dejar el total en grande y el vuelto en letra chica
+ * obligaba a buscarlo justo cuando hay un cliente esperando la mano.
+ *
+ * Es el mismo recurso que ya usa la propina: el importe grande manda y el
+ * rótulo dice qué es. El número lo calcula el servidor; acá solo se elige cuál
+ * mostrar.
+ */
+const change = computed(() => props.sale?.change ?? '0.00')
+const hasChange = computed(() => Number(change.value) > 0)
 </script>
 
 <template>
@@ -80,7 +95,7 @@ const amountDue = computed(() =>
 
     <div class="flex items-baseline justify-between border-t border-default pt-2">
       <span class="text-muted text-lg">{{ t('sale.total') }}</span>
-      <span :class="hasTip ? 'pos-amount text-xl font-semibold' : 'pos-total'">
+      <span :class="hasTip || hasChange ? 'pos-amount text-xl font-semibold' : 'pos-total'">
         {{ amount(sale?.total ?? '0.00') }}
       </span>
     </div>
@@ -95,10 +110,17 @@ const amountDue = computed(() =>
         <span class="text-muted">{{ t('sale.tip') }}</span>
         <span class="pos-amount">{{ amount(sale?.tip_amount ?? '0.00') }}</span>
       </div>
-      <div class="flex items-baseline justify-between">
+      <div v-if="!hasChange" class="flex items-baseline justify-between">
         <span class="text-muted text-lg">{{ t('sale.amountDue') }}</span>
         <span class="pos-total">{{ amountDue }}</span>
       </div>
     </template>
+
+    <!-- Entregaron de más: lo que hay que leer ya no es lo que falta cobrar,
+         sino lo que hay que devolver. -->
+    <div v-if="hasChange" class="flex items-baseline justify-between">
+      <span class="text-lg font-medium text-success">{{ t('sale.change') }}</span>
+      <span class="pos-total text-success">{{ amount(change) }}</span>
+    </div>
   </div>
 </template>

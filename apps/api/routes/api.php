@@ -244,6 +244,8 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('permission:pos_settings.update');
         Route::put('/receipt-templates/{id}', [ReceiptTemplateController::class, 'update'])
             ->middleware('permission:pos_settings.update');
+        Route::delete('/receipt-templates/{id}', [ReceiptTemplateController::class, 'destroy'])
+            ->middleware('permission:pos_settings.update');
         Route::post('/receipt-templates/{id}/duplicate', [ReceiptTemplateController::class, 'duplicate'])
             ->middleware('permission:pos_settings.update');
 
@@ -336,6 +338,20 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('permission:pos_shift.close');
         Route::get('/shifts/{id}/summary', [ShiftController::class, 'summary'])
             ->middleware('permission:report.shift_cut');
+        /*
+         * Cajas cerradas y su descuadre (H4.3).
+         *
+         * Cuadrar no reescribe el arqueo: asienta un movimiento de caja con su
+         * motivo y su autorización. Exige **PIN de supervisor**, distinto del de
+         * sesión (P-11), porque mover plata de un arqueo cerrado es donde
+         * conviene el segundo freno.
+         */
+        Route::get('/shifts', [ShiftController::class, 'index'])
+            ->middleware('permission:report.shift_cut');
+        Route::post('/shifts/{id}/settle', [ShiftController::class, 'settle'])
+            ->middleware('permission:pos_shift.settle');
+        Route::get('/shifts/{id}/cut/pdf', [ShiftController::class, 'cutPdf'])
+            ->middleware('permission:report.shift_cut');
         Route::post('/cash/movements', [ShiftController::class, 'movement'])
             ->middleware('permission:pos_cash.movement');
 
@@ -359,6 +375,16 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('permission:pos_sale.create,report.daily_sales');
         Route::post('/sales', [SaleController::class, 'store'])
             ->middleware('permission:pos_sale.create');
+        /*
+         * Qué queda por devolver de un ticket (H2.6).
+         *
+         * Lo consulta la pantalla de devolución antes de dejar elegir nada: la
+         * cuenta descuenta lo ya devuelto, porque tres devoluciones parciales de
+         * una unidad vaciarían un ticket de dos.
+         */
+        Route::get('/sales/{id}/refundable', [SaleController::class, 'refundable'])
+            ->middleware('permission:pos_sale.refund');
+
         Route::get('/sales/{id}', [SaleController::class, 'show'])
             ->middleware('permission:pos_sale.create,report.daily_sales');
         Route::post('/sales/{id}/close', [SaleController::class, 'close'])
@@ -383,6 +409,14 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('permission:dining.serve,pos_sale.suspend');
         Route::post('/sales/{id}/split', [SaleController::class, 'split'])
             ->middleware('permission:dining.serve,pos_sale.suspend');
+
+        /*
+         * A quién se le vende. Quien puede vender puede elegirlo; crear
+         * clientes sigue siendo del supervisor (Q-03). Cambia el impuesto si el
+         * cliente está exonerado, así que recalcula la venta.
+         */
+        Route::post('/sales/{id}/customer', [SaleController::class, 'setCustomer'])
+            ->middleware('permission:pos_sale.create');
 
         Route::post('/sales/{id}/suspend', [SaleController::class, 'suspend'])
             ->middleware('permission:pos_sale.suspend');

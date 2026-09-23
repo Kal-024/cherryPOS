@@ -353,12 +353,27 @@ class CartService
         return $sale->fresh();
     }
 
-    /** Retoma una venta suspendida en **cualquier** terminal de la sucursal. */
+    /**
+     * Retoma una cuenta abierta desde **cualquier** terminal de la sucursal.
+     *
+     * Acepta las dos situaciones en que una mesa se ve ocupada, porque
+     * `DiningTable::openSale()` considera abierta la venta en `draft` **o** en
+     * `suspended` y las dos reglas tienen que decir lo mismo. Si aquí solo
+     * entrara la suspendida, una cuenta que alguien abrió en la caja y dejó a
+     * medias —nada la vuelve a suspender al salir de la pantalla— dejaría su
+     * mesa ocupada y **intocable**: tocarla respondía "esta venta no está
+     * suspendida", que no le dice nada a un mesero.
+     *
+     * Que la cuenta estuviera en `draft` en otra caja no es un accidente a
+     * evitar: es el flujo del restaurante, donde el mesero la abre y la caja la
+     * cobra. Por eso se reasignan terminal y cajero, y por eso queda en la
+     * bitácora.
+     */
     public function resume(Sale $sale, string $terminalId, ?string $employeeId = null): Sale
     {
-        if ($sale->status !== Sale::STATUS_SUSPENDED) {
+        if (! in_array($sale->status, [Sale::STATUS_SUSPENDED, Sale::STATUS_DRAFT], true)) {
             throw ValidationException::withMessages([
-                'sale' => __('sales.not_suspended'),
+                'sale' => __('sales.not_resumable'),
             ]);
         }
 

@@ -48,6 +48,9 @@ class PermissionSeeder extends Seeder
         'caja' => [
             'pos_shift.open' => 'Abrir turno de caja',
             'pos_shift.close' => 'Cerrar turno y hacer el arqueo',
+            // Cuadrar no reescribe el arqueo: asienta el faltante o el sobrante
+            // como movimiento de caja, con motivo y autorización.
+            'pos_shift.settle' => 'Cuadrar una caja cerrada con diferencia',
             'pos_shift.read' => 'Consultar turnos',
             'pos_cash.movement' => 'Registrar entradas y salidas de caja',
             'pos_exchange_rate.update' => 'Cargar el tipo de cambio del día',
@@ -125,7 +128,8 @@ class PermissionSeeder extends Seeder
                 'pos_sale.create', 'pos_sale.suspend', 'pos_sale.void', 'pos_sale.refund',
                 'pos_sale.discount', 'pos_sale.discount_authorize', 'pos_sale.temporary_item',
                 'pos_sale.price_override',
-                'pos_shift.open', 'pos_shift.close', 'pos_shift.read', 'pos_cash.movement',
+                'pos_shift.open', 'pos_shift.close', 'pos_shift.read', 'pos_shift.settle',
+                'pos_cash.movement',
                 'pos_exchange_rate.update',
                 'catalog.product.read', 'catalog.product.create', 'catalog.product.update',
                 'inventory.read', 'inventory.adjust',

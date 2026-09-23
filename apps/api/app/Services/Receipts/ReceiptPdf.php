@@ -29,6 +29,18 @@ class ReceiptPdf
 
     private const MM_TO_PT = 2.83465;
 
+    /**
+     * Cuánto avanza un carácter en una monoespaciada, en proporción al cuerpo.
+     *
+     * DejaVu Sans Mono avanza 0,602 em por carácter. Es el número que convierte
+     * "cuarenta y ocho caracteres" en milímetros, y sin él no hay forma de saber
+     * si el ticket entra en el rollo.
+     */
+    private const ADVANCE = 0.602;
+
+    /** Margen a cada lado, en milímetros. */
+    private const PADDING_MM = ['thermal' => 2.0, 'page' => 12.0];
+
     /** @param array<int,array<string,mixed>> $lines */
     public function make(ReceiptTemplate $template, array $lines, array $context): PdfDocument
     {
@@ -36,9 +48,10 @@ class ReceiptPdf
 
         if (isset(self::PAPER_MM[$template->paper])) {
             $width = self::PAPER_MM[$template->paper] * self::MM_TO_PT;
-            // Altura estimada por la cantidad de líneas más margen de corte:
-            // sobra papel antes que cortar el total.
-            $height = count($lines) * 12 + 80;
+            // Altura estimada a partir del cuerpo real y el interlineado, más
+            // margen de corte: sobra papel antes que cortar el total.
+            $lineHeight = $this->fontSizeFor($template->paper, self::PADDING_MM['thermal']) * 1.35;
+            $height = count($lines) * $lineHeight + 80;
 
             $pdf->setPaper([0, 0, $width, $height]);
         } else {
@@ -58,8 +71,8 @@ class ReceiptPdf
         }
 
         $thermal = str_starts_with($template->paper, 'thermal');
-        $fontSize = $thermal ? '9pt' : '11pt';
-        $padding = $thermal ? '2mm' : '12mm';
+        $padding = $thermal ? self::PADDING_MM['thermal'] : self::PADDING_MM['page'];
+        $fontSize = $this->fontSizeFor($template->paper, $padding);
 
         return <<<HTML
         <!DOCTYPE html>
@@ -73,16 +86,21 @@ class ReceiptPdf
                        espacios contando caracteres, y con una tipografía
                        proporcional los importes no quedarían alineados. */
                     font-family: "DejaVu Sans Mono", monospace;
-                    font-size: {$fontSize};
+                    font-size: {$fontSize}pt;
                     line-height: 1.35;
                     margin: 0;
-                    padding: {$padding};
+                    padding: {$padding}mm;
                     white-space: pre;
                 }
                 .center { text-align: center; }
                 .right { text-align: right; }
                 .bold { font-weight: bold; }
-                .lg { font-size: 1.25em; }
+                /* **No agranda el cuerpo.** El ancho del ticket está medido en
+                   caracteres, así que una línea más grande se saldría del rollo
+                   y perdería justo lo que lleva a la derecha: el importe. El
+                   énfasis de verdad llega con la térmica, que sabe imprimir a
+                   doble alto sin ocupar más ancho. */
+                .lg { font-weight: bold; }
                 .sm { font-size: 0.85em; }
                 .sep { border-top: 1px dashed #000; margin: 2px 0; }
                 .logo { text-align: center; font-weight: bold; padding: 2px 0; }
@@ -91,6 +109,30 @@ class ReceiptPdf
         <body>{$body}</body>
         </html>
         HTML;
+    }
+
+    /**
+     * Qué cuerpo de letra hace que el ticket entre en el papel.
+     *
+     * El renderizador justifica **contando caracteres** —32 en un rollo de 58 mm,
+     * 48 en uno de 80— y el PDF tiene que respetar esa misma cuenta. Con un
+     * cuerpo fijo no la respetaba: a 9 pt, 48 caracteres ocupan unos 91 mm y el
+     * papel tiene 80, así que **todo lo alineado a la derecha se salía de la
+     * hoja**. Lo que se perdía era exactamente lo que el cliente mira: el número
+     * de comprobante, la fecha y la columna entera de importes, incluido el
+     * total.
+     *
+     * Se calcula al revés: del ancho útil se deduce cuánto puede medir cada
+     * carácter, y de ahí el cuerpo. El 2 % de margen absorbe el redondeo de la
+     * métrica de la fuente.
+     */
+    private function fontSizeFor(string $paper, float $paddingMm): float
+    {
+        $chars = ReceiptTemplate::WIDTHS[$paper] ?? 48;
+        $widthMm = self::PAPER_MM[$paper] ?? 215.9;
+        $usablePt = ($widthMm - 2 * $paddingMm) * self::MM_TO_PT;
+
+        return round($usablePt / ($chars * self::ADVANCE) * 0.98, 2);
     }
 
     /** @param array<string,mixed> $line */
@@ -107,9 +149,12 @@ class ReceiptPdf
         }
 
         if ($kind === 'logo') {
-            // Sin logo cargado se imprime el nombre del negocio: un hueco donde
-            // debería ir la identidad se lee como una impresora rota.
-            return '<div class="logo">'.e($context['branch']['legal_name'] ?? '').'</div>';
+            // **Sin logo cargado no se imprime nada.** Imprimir el nombre del
+            // negocio como respaldo lo dejaba dos veces seguidas, porque la
+            // plantilla ya lo lleva en su propia línea justo debajo. Un
+            // comprobante que repite el nombre del local parece mal armado, que
+            // es peor que uno sin logo.
+            return '';
         }
 
         if ($kind === 'qr') {

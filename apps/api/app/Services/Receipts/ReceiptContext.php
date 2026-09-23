@@ -82,7 +82,7 @@ class ReceiptContext
                 'uom' => $line->product?->uom?->code,
                 'description' => $line->description,
                 'item_code' => $line->item_code,
-                'unit_price' => (string) $line->unit_price,
+                'unit_price' => $this->price((string) $line->unit_price),
                 'discount' => (string) bcadd((string) $line->line_discount, (string) $line->sale_discount_share, 2),
                 'total' => (string) $line->total,
                 'is_exempt' => (bool) $line->is_exempt,
@@ -196,5 +196,26 @@ class ReceiptContext
         return str_contains($value, '.')
             ? rtrim(rtrim($value, '0'), '.')
             : $value;
+    }
+
+    /**
+     * Un precio como lo lee un cliente.
+     *
+     * La columna guarda cuatro decimales porque hay productos que se venden por
+     * peso y su precio unitario los necesita. En el ticket, en cambio,
+     * "350.0000" no aclara nada: se leen dos decimales, que es como está escrito
+     * el billete. Los decimales que sí llevan información —un precio por gramo—
+     * se conservan.
+     */
+    private function price(string $value): string
+    {
+        if (! str_contains($value, '.')) {
+            return $value.'.00';
+        }
+
+        [$whole, $decimals] = explode('.', $value, 2);
+        $decimals = rtrim($decimals, '0');
+
+        return $whole.'.'.str_pad(mb_substr($decimals, 0, 4), 2, '0');
     }
 }

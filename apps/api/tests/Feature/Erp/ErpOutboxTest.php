@@ -69,6 +69,41 @@ class ErpOutboxTest extends TestCase
         return Sale::with('lines.taxes', 'terminal')->find($sale);
     }
 
+    /**
+     * Un ticket cerrado y las credenciales para devolver contra él.
+     *
+     * Devolver exige el documento original y la firma de un supervisor: la regla
+     * la impone el POS antes de abrir el cajón, no el ERP cuando el dinero ya
+     * salió.
+     *
+     * @return array{0:string,1:array<string,string>}
+     */
+    private function originalTicket(string $sku, string $price): array
+    {
+        $product = $this->product($sku, $price, ['allow_negative_stock' => true]);
+
+        $sale = $this->actingAsTerminal($this->token)
+            ->postJson('/api/sales', [])->json('data.id');
+
+        $this->actingAsTerminal($this->token)->postJson("/api/sales/{$sale}/lines", [
+            'kind' => 'product', 'product_id' => $product->id, 'qty' => '1',
+        ])->assertCreated();
+
+        $this->actingAsTerminal($this->token)->postJson("/api/sales/{$sale}/payments", [
+            'method' => 'cash', 'amount' => $price,
+        ])->assertCreated();
+
+        $this->actingAsTerminal($this->token)->postJson("/api/sales/{$sale}/close")->assertOk();
+
+        $this->employee('SUPDEV', '4321', 'supervisor', '9876');
+
+        return [$sale, [
+            'reverses_sale_id' => $sale,
+            'supervisor_code' => 'SUPDEV',
+            'supervisor_pin' => '9876',
+        ]];
+    }
+
     public function test_el_ticket_tiene_la_forma_que_valida_el_erp(): void
     {
         Http::fake();
@@ -103,10 +138,12 @@ class ErpOutboxTest extends TestCase
         // cuerpo. Internamente el POS guarda la devolución con cantidades
         // negativas —así el motor la trata como el negativo exacto de su venta—
         // y el adaptador invierte solo la cantidad.
-        $product = $this->product('P-002', '100.00', ['allow_negative_stock' => true]);
+        [, $refundOf] = $this->originalTicket('P-002', '100.00');
+        $product = \App\Models\Product::where('sku', 'P-002')->firstOrFail();
 
         $sale = $this->actingAsTerminal($this->token)
-            ->postJson('/api/sales', ['sale_type' => 'refund'])->json('data.id');
+            ->postJson('/api/sales', ['sale_type' => 'refund'] + $refundOf)
+            ->assertCreated()->json('data.id');
 
         $this->actingAsTerminal($this->token)->postJson("/api/sales/{$sale}/lines", [
             'kind' => 'product',

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import SaleSearch from './SaleSearch.vue'
+import { ref, nextTick } from 'vue'
 import type { CatalogProduct } from '../composables/useCatalog'
 
 /**
@@ -35,11 +36,17 @@ const cola: CatalogProduct = {
 const results = vi.fn<(term: string, limit?: number) => CatalogProduct[]>()
 const byBarcode = vi.fn<(code: string) => CatalogProduct | null>()
 
+/** Cuántos productos tiene la caché. Cero = el catálogo todavía está bajando. */
+const cached = ref(2)
+const whenReady = vi.fn(async () => undefined)
+
 vi.mock('../composables/useCatalog', () => ({
   useCatalog: () => ({
     search: (term: string, limit?: number) => results(term, limit),
     byBarcode: (code: string) => byBarcode(code),
-    favourites: { value: [] }
+    favourites: { value: [] },
+    count: cached,
+    whenReady
   })
 }))
 
@@ -49,6 +56,73 @@ describe('SaleSearch', () => {
     byBarcode.mockReset()
     byBarcode.mockReturnValue(null)
     results.mockReturnValue([])
+    cached.value = 2
+    whenReady.mockReset()
+    whenReady.mockResolvedValue(undefined)
+  })
+
+  describe('mientras el catálogo baja', () => {
+    it('no dice que el producto no existe: dice que está cargando', async () => {
+      // Con la caché vacía la búsqueda local no encuentra nada, y "no existe" es
+      // mentira — el producto está, solo que todavía no acá. En una caja esa
+      // mentira acaba con el cajero diciéndole al cliente que no hay algo que sí
+      // hay.
+      cached.value = 0
+
+      const wrapper = mount(SaleSearch)
+      await wrapper.get('input').setValue('Lomo')
+
+      expect(wrapper.text()).toContain('Cargando el catálogo')
+      expect(wrapper.text()).not.toContain('No hay ningún producto')
+    })
+
+    it('al confirmar espera el catálogo antes de resolver', async () => {
+      cached.value = 0
+
+      const wrapper = mount(SaleSearch)
+      const input = wrapper.get('input')
+
+      await input.setValue('Lomo')
+      await input.trigger('keydown.enter')
+
+      // Preguntarle al servidor por "Lomo" como si fuera un código de barras es
+      // lo que producía la negativa falsa.
+      expect(whenReady).toHaveBeenCalled()
+    })
+
+    it('si el catálogo llega con el producto, lo agrega en vez de negarlo', async () => {
+      cached.value = 0
+
+      // La bajada termina y el producto aparece: es la misma pulsación, no una
+      // segunda que el cajero tenga que acordarse de repetir.
+      whenReady.mockImplementation(async () => {
+        cached.value = 1
+        results.mockReturnValue([cheese])
+      })
+
+      const wrapper = mount(SaleSearch)
+      const input = wrapper.get('input')
+
+      await input.setValue('Queso')
+      await input.trigger('keydown.enter')
+      await nextTick()
+      await nextTick()
+
+      expect(wrapper.emitted('pick')?.[0]?.[0]).toEqual(cheese)
+      expect(wrapper.emitted('scan')).toBeUndefined()
+    })
+
+    it('con la caché llena no espera nada', async () => {
+      byBarcode.mockReturnValue(cheese)
+
+      const wrapper = mount(SaleSearch)
+      const input = wrapper.get('input')
+
+      await input.setValue('7501234567890')
+      await input.trigger('keydown.enter')
+
+      expect(whenReady).not.toHaveBeenCalled()
+    })
   })
 
   it('una lectura del lector agrega sin pedir confirmación', async () => {

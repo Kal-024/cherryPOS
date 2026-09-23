@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { activateTerminal } from './support/terminal'
 
 /**
  * Cambiar de caja sin perder lo vendido sin conexión (H6.4, D-05).
@@ -20,11 +21,7 @@ const OPERATOR = { code: 'ADMIN', pin: '1234' }
 
 async function activar(page: Page, terminal: string) {
   await expect(page).toHaveURL(/\/terminal$/)
-  await page.getByLabel('Código de sucursal').fill('001')
-  await page.getByLabel('Código de terminal').fill(terminal)
-  await page.getByLabel('Secreto de la terminal').fill(SECRET)
-  await page.getByRole('button', { name: 'Activar terminal' }).click()
-  await expect(page).not.toHaveURL(/\/terminal$/)
+  await activateTerminal(page, { branch: '001', terminal, secret: SECRET })
 
   if (page.url().endsWith('/login')) {
     await page.getByLabel('Código de cajero').fill(OPERATOR.code)

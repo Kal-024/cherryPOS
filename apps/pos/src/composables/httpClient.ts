@@ -172,3 +172,34 @@ export async function apiDownload(path: string, filename: string): Promise<void>
 
   URL.revokeObjectURL(url)
 }
+
+/**
+ * Abre un documento de la API en una pestaña, con las credenciales de la
+ * terminal.
+ *
+ * No sirve `window.open` contra la ruta: la API pide cabecera de autorización y
+ * una pestaña nueva no la lleva. Hay que traerlo con `fetch` y abrir el blob.
+ *
+ * **Abrir y no descargar es la diferencia que importa en una caja.** El
+ * comprobante se entrega en mano, así que el cajero necesita el visor del
+ * navegador —con su botón de imprimir— y no un archivo en la carpeta de
+ * descargas. Es lo que pide H5.3 mientras no exista el agente de impresión.
+ *
+ * La URL se libera al rato y no en el acto: revocarla enseguida deja la pestaña
+ * recién abierta sin nada que mostrar.
+ */
+export async function apiOpen(path: string): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}${path}`, { headers: headers() })
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null)
+    const error = new Error(payload?.message ?? t('common.errors.generic')) as ApiError
+    error.status = response.status
+    throw error
+  }
+
+  const url = URL.createObjectURL(await response.blob())
+
+  window.open(url, '_blank', 'noopener')
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}

@@ -46,6 +46,7 @@ class SaleCloser
         private LotAllocationService $lots,
         private ErpOutboxService $outbox,
         private AuditLogger $audit,
+        private RefundService $refunds,
     ) {}
 
     public function close(Sale $sale): Sale
@@ -64,6 +65,7 @@ class SaleCloser
         $sale->refresh();
 
         $this->assertSettled($sale, $result);
+        $this->assertRefundFitsOriginal($sale);
 
         DB::transaction(function () use ($sale, $result) {
             $this->recordChange($sale, $result['change']);
@@ -111,6 +113,32 @@ class SaleCloser
      * esperado es la simple suma de los pagos en efectivo — que es lo que el
      * cajón realmente tiene.
      */
+    /**
+     * Una devolución no puede exceder lo que se vendió.
+     *
+     * Se comprueba **al cerrar**, que es cuando el dinero sale del cajón: hasta
+     * ahí el cajero puede corregir el carrito. Sin esta cuenta, tres
+     * devoluciones parciales de una unidad vacían un ticket de dos y el mismo
+     * producto se paga dos veces sin que nada lo denuncie hasta el arqueo.
+     */
+    private function assertRefundFitsOriginal(Sale $sale): void
+    {
+        if ($sale->sale_type !== 'refund' || $sale->reverses_sale_id === null) {
+            return;
+        }
+
+        $original = Sale::with('lines')->find($sale->reverses_sale_id);
+
+        if (! $original) {
+            return;
+        }
+
+        $this->refunds->assertWithinOriginal($original, $sale->lines->map(fn ($line) => [
+            'product_id' => $line->product_id,
+            'qty' => (string) $line->qty,
+        ])->all());
+    }
+
     private function recordChange(Sale $sale, string $change): void
     {
         if (bccomp($change, '0', 2) <= 0) {

@@ -25,11 +25,15 @@ class CashMovement extends Model
 
     protected $fillable = [
         'shift_id', 'branch_id', 'employee_id', 'authorized_by', 'direction',
-        'reason', 'amount', 'currency_code', 'exchange_rate', 'amount_base',
+        'reason', 'is_settlement', 'amount', 'currency_code', 'exchange_rate', 'amount_base',
         'occurred_at', 'recorded_at',
     ];
 
-    protected $casts = ['occurred_at' => 'datetime', 'recorded_at' => 'datetime'];
+    protected $casts = [
+        'occurred_at' => 'datetime',
+        'recorded_at' => 'datetime',
+        'is_settlement' => 'boolean',
+    ];
 
     public function shift(): BelongsTo
     {
