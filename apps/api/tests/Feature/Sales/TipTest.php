@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Sales;
 
+use App\Models\Product;
 use App\Models\Sale;
 use App\Models\Shift;
 use App\Models\Terminal;
@@ -161,7 +162,7 @@ class TipTest extends TestCase
     public function test_la_devolucion_entrega_la_propina(): void
     {
         [, $refundOf] = $this->originalTicket('PLATO-DEV', '115.00');
-        $product = \App\Models\Product::where('sku', 'PLATO-DEV')->firstOrFail();
+        $product = Product::where('sku', 'PLATO-DEV')->firstOrFail();
 
         $id = $this->withToken($this->token)
             ->postJson('/api/sales', ['sale_type' => 'refund'] + $refundOf)

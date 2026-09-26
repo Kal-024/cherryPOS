@@ -33,6 +33,10 @@ class Product extends Model
 
     protected $casts = [
         'attributes' => 'array',
+        // La lista 86 (F1-B): cuándo se marcó como agotado. Deliberadamente
+        // **fuera de `$fillable`** — la escribe `AvailabilityService`, no el
+        // formulario de producto ni el pull de maestros del ERP.
+        'unavailable_since' => 'datetime',
         'is_exempt' => 'boolean',
         'tracks_stock' => 'boolean',
         'tracks_lots' => 'boolean',
@@ -42,9 +46,21 @@ class Product extends Model
         'is_active' => 'boolean',
     ];
 
+    /** Se acabó hoy: no es baja de catálogo, es la lista 86 del servicio. */
+    public function isUnavailable(): bool
+    {
+        return $this->unavailable_since !== null;
+    }
+
     public function uom(): BelongsTo
     {
         return $this->belongsTo(Uom::class);
+    }
+
+    /** Quién lo marcó agotado: a quién preguntarle si el cliente reclama. */
+    public function unavailableBy(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'unavailable_by');
     }
 
     /** Grupos de modificadores que este producto pregunta al venderse (B-06). */

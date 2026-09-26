@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\KitchenTicketController;
 use App\Http\Controllers\Api\LocationController;
 use App\Http\Controllers\Api\OfflineSaleController;
 use App\Http\Controllers\Api\OperatorSessionController;
+use App\Http\Controllers\Api\ProductAvailabilityController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ReceiptController;
 use App\Http\Controllers\Api\ReceiptTemplateController;
@@ -92,6 +93,26 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/catalog/scan', [CatalogScanController::class, 'show'])
             ->middleware('permission:catalog.product.read');
+
+        /*
+         * La lista 86: lo que se acabó hoy (F1-B).
+         *
+         * Leerla es de cualquiera que venda —el mesero necesita ver el plato
+         * atenuado—; marcarla es de quien lleva el local. Y `index` devuelve
+         * solo identificadores porque el terminal la sondea: bajar el catálogo
+         * entero para saber que se acabó el pescado sería absurdo (D-04).
+         */
+        // Las válvulas de escape del catálogo (D-03): cuántas quedan hoy. La caja
+        // lo pregunta al abrir el diálogo, no al sexto intento.
+        Route::get('/special-lines/quota', [SaleLineController::class, 'quota'])
+            ->middleware('permission:pos_sale.create');
+
+        Route::get('/catalog/unavailable', [ProductAvailabilityController::class, 'index'])
+            ->middleware('permission:catalog.product.read');
+        Route::post('/catalog/products/{id}/unavailable', [ProductAvailabilityController::class, 'store'])
+            ->middleware('permission:catalog.availability');
+        Route::delete('/catalog/products/{id}/unavailable', [ProductAvailabilityController::class, 'destroy'])
+            ->middleware('permission:catalog.availability');
 
         /*
          * Referencias del catálogo.
@@ -198,6 +219,10 @@ Route::middleware('auth:sanctum')->group(function () {
          */
         Route::get('/sales/{sale}/receipt', [ReceiptController::class, 'show'])
             ->middleware('permission:pos_sale.create');
+        // La precuenta del salón: lo consumido, sin cobrar. Imprimirla marca la
+        // mesa como "cuenta pedida", que es el estado que el mapa necesita.
+        Route::get('/sales/{sale}/pre-bill/pdf', [ReceiptController::class, 'preBill'])
+            ->middleware('permission:pos_sale.create');
         Route::get('/sales/{sale}/receipt/pdf', [ReceiptController::class, 'pdf'])
             ->middleware('permission:pos_sale.create');
         Route::post('/sales/{sale}/receipt/deliver', [ReceiptController::class, 'deliver'])
@@ -264,6 +289,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/dining/tables/{id}/merge', [DiningRoomController::class, 'merge'])
             ->middleware('permission:dining.serve');
         Route::post('/dining/tables/{id}/split', [DiningRoomController::class, 'split'])
+            ->middleware('permission:dining.serve');
+        // La libreta del mesero sobre la cuenta abierta: «cumpleaños»,
+        // «apurados». La nota de la línea es otra cosa y viaja a la comanda.
+        Route::put('/dining/tables/{id}/note', [DiningRoomController::class, 'note'])
             ->middleware('permission:dining.serve');
 
         /*

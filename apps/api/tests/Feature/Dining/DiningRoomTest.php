@@ -193,6 +193,207 @@ class DiningRoomTest extends TestCase
         $this->assertNull($other->fresh()->merged_into_id);
     }
 
+    public function test_unir_un_grupo_a_otra_mesa_forma_un_solo_grupo(): void
+    {
+        $tres = $this->table('M3');
+        $cuatro = $this->table('M4');
+        $dos = $this->table('M2');
+
+        // La 4 se une a la 3, y después la 3 —que manda— se arrastra sobre la 2.
+        $this->actingAsTerminal($this->token)
+            ->postJson("/api/dining/tables/{$tres->id}/merge", ['tables' => [$cuatro->id]])
+            ->assertOk();
+
+        $this->actingAsTerminal($this->token)
+            ->postJson("/api/dining/tables/{$dos->id}/merge", ['tables' => [$tres->id]])
+            ->assertOk();
+
+        // Las tres son una sola unidad. Antes quedaba la cadena 4 → 3 → 2, y como
+        // todo el salón mira un solo salto, la 4 se quedaba fuera del grupo y sin
+        // forma de soltarse.
+        $this->assertSame($dos->id, $tres->fresh()->merged_into_id);
+        $this->assertSame($dos->id, $cuatro->fresh()->merged_into_id);
+    }
+
+    public function test_separar_una_mesa_no_deshace_el_grupo(): void
+    {
+        $main = $this->table('M1');
+        $dos = $this->table('M2');
+        $tres = $this->table('M3');
+
+        $this->actingAsTerminal($this->token)
+            ->postJson("/api/dining/tables/{$main->id}/merge", ['tables' => [$dos->id, $tres->id]])
+            ->assertOk();
+
+        // Se suelta la 2 y nada más: con tres mesas empujadas contra una, devolver
+        // una a su sitio no debería obligar a rearmar el resto a mano.
+        $this->actingAsTerminal($this->token)
+            ->postJson("/api/dining/tables/{$dos->id}/split")
+            ->assertOk();
+
+        $this->assertNull($dos->fresh()->merged_into_id);
+        $this->assertSame($main->id, $tres->fresh()->merged_into_id);
+    }
+
+    public function test_la_mesa_soltada_vuelve_a_aceptar_cuenta(): void
+    {
+        $main = $this->table('M1');
+        $other = $this->table('M2');
+
+        $this->actingAsTerminal($this->token)
+            ->postJson("/api/dining/tables/{$main->id}/merge", ['tables' => [$other->id]])
+            ->assertOk();
+
+        $this->actingAsTerminal($this->token)
+            ->postJson("/api/dining/tables/{$other->id}/split")
+            ->assertOk();
+
+        $this->actingAsTerminal($this->token)
+            ->postJson("/api/dining/tables/{$other->id}/open")
+            ->assertCreated();
+    }
+
+    public function test_la_nota_se_guarda_sobre_la_cuenta_abierta(): void
+    {
+        $table = $this->table('M1');
+
+        $sale = $this->actingAsTerminal($this->token)
+            ->postJson("/api/dining/tables/{$table->id}/open")
+            ->assertCreated()->json('data.sale.id');
+
+        $this->actingAsTerminal($this->token)->putJson("/api/dining/tables/{$table->id}/note", [
+            'notes' => 'Cumpleaños, traer el postre con vela',
+        ])->assertOk();
+
+        $this->assertSame(
+            'Cumpleaños, traer el postre con vela',
+            Sale::find($sale)->notes
+        );
+    }
+
+    public function test_la_nota_viaja_con_el_mapa(): void
+    {
+        $table = $this->table('M1');
+
+        $this->actingAsTerminal($this->token)
+            ->postJson("/api/dining/tables/{$table->id}/open")->assertCreated();
+
+        $this->actingAsTerminal($this->token)->putJson("/api/dining/tables/{$table->id}/note", [
+            'notes' => 'Apurados',
+        ])->assertOk();
+
+        // Una nota que nadie ve no sirve de nada: la ficha del salón la marca, y
+        // el mapa llega de una sola consulta por sondeo (G-13).
+        $map = $this->actingAsTerminal($this->token)->getJson('/api/dining/map')->assertOk();
+
+        $this->assertSame('Apurados', $map->json('data.tables.0.sale.notes'));
+    }
+
+    public function test_vaciar_la_nota_la_borra(): void
+    {
+        $table = $this->table('M1');
+
+        $sale = $this->actingAsTerminal($this->token)
+            ->postJson("/api/dining/tables/{$table->id}/open")
+            ->assertCreated()->json('data.sale.id');
+
+        $this->actingAsTerminal($this->token)
+            ->putJson("/api/dining/tables/{$table->id}/note", ['notes' => 'Algo'])->assertOk();
+
+        // Sin esto haría falta un segundo botón para borrar, y con el cliente
+        // esperando nadie lo busca.
+        $this->actingAsTerminal($this->token)
+            ->putJson("/api/dining/tables/{$table->id}/note", ['notes' => '  '])->assertOk();
+
+        $this->assertNull(Sale::find($sale)->notes);
+    }
+
+    public function test_sin_cuenta_abierta_no_hay_donde_anotar(): void
+    {
+        $table = $this->table('M1');
+
+        // Guardar la nota en la mesa para cubrir este caso la haría sobrevivir al
+        // cliente, y entonces alguien tendría que acordarse de borrarla.
+        $this->actingAsTerminal($this->token)
+            ->putJson("/api/dining/tables/{$table->id}/note", ['notes' => 'Mesa coja'])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.table.0', __('dining.note_needs_tab'));
+    }
+
+    public function test_la_nota_se_va_con_la_cuenta_cobrada(): void
+    {
+        $table = $this->table('M1');
+
+        $sale = $this->actingAsTerminal($this->token)
+            ->postJson("/api/dining/tables/{$table->id}/open")
+            ->assertCreated()->json('data.sale.id');
+
+        $this->actingAsTerminal($this->token)
+            ->putJson("/api/dining/tables/{$table->id}/note", ['notes' => 'Cumpleaños'])->assertOk();
+
+        // Se cobra de verdad: una cuenta vacía no cierra, y sin cierre la prueba
+        // no probaría nada.
+        $product = $this->product('P-NOTA', '100.00', ['allow_negative_stock' => true]);
+
+        $this->actingAsTerminal($this->token)->postJson("/api/sales/{$sale}/lines", [
+            'kind' => 'product', 'product_id' => $product->id, 'qty' => '1',
+        ])->assertCreated();
+
+        $this->actingAsTerminal($this->token)->postJson("/api/sales/{$sale}/payments", [
+            'method' => 'cash', 'amount' => '100.00',
+        ])->assertCreated();
+
+        $this->actingAsTerminal($this->token)->postJson("/api/sales/{$sale}/close")->assertOk();
+
+        // Cobrada la cuenta, la mesa vuelve libre y no hay nota que arrastrar: la
+        // vida útil de la nota es la del servicio, no la de la mesa.
+        $this->actingAsTerminal($this->token)
+            ->putJson("/api/dining/tables/{$table->id}/note", ['notes' => 'Otra cosa'])
+            ->assertStatus(422);
+    }
+
+    public function test_la_mesa_lleva_su_forma_y_su_tamano(): void
+    {
+        $table = $this->table('M1');
+
+        // El plano lo configura quien lleva el local (`dining.manage`), no el
+        // mesero: una sola sesión de operador por terminal (D-05), así que se
+        // entra con el suyo para esta prueba.
+        $token = $this->signedIn($this->employee('SUP01', '4321', 'supervisor', '9876'), '4321');
+
+        // `rect` existía en la base desde el primer día y la pantalla lo dibujaba
+        // igual que el cuadrado: sin ancho y alto propios no hay forma de que uno
+        // se vea distinto del otro.
+        $this->actingAsTerminal($token)->putJson("/api/dining/tables/{$table->id}", [
+            'shape' => 'rect',
+            'width' => 240,
+            'height' => 120,
+        ])->assertOk();
+
+        $map = $this->actingAsTerminal($token)->getJson('/api/dining/map')->assertOk();
+
+        $this->assertSame('rect', $map->json('data.tables.0.shape'));
+        $this->assertSame(240, $map->json('data.tables.0.width'));
+        $this->assertSame(120, $map->json('data.tables.0.height'));
+    }
+
+    public function test_una_mesa_no_puede_medir_cualquier_cosa(): void
+    {
+        $table = $this->table('M1');
+
+        $token = $this->signedIn($this->employee('SUP01', '4321', 'supervisor', '9876'), '4321');
+
+        // Fuera del rango no es una mesa: es un dedo que resbaló arrastrando la
+        // esquina, y una mesa de mil píxeles tapa el plano entero.
+        $this->actingAsTerminal($token)
+            ->putJson("/api/dining/tables/{$table->id}", ['width' => 5000])
+            ->assertStatus(422);
+
+        $this->actingAsTerminal($token)
+            ->putJson("/api/dining/tables/{$table->id}", ['height' => 10])
+            ->assertStatus(422);
+    }
+
     public function test_el_mesero_no_configura_el_salon(): void
     {
         // Mover una mesa en el plano no es una operación de turno.

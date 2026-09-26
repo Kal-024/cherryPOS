@@ -26,6 +26,12 @@ export type BlockType =
   | 'payments'
   | 'taxes'
   | 'qr'
+  // Corte de turno (H4): listas que el ticket de venta no tiene.
+  | 'shift_sales'
+  | 'shift_currencies'
+  | 'shift_cashiers'
+  | 'shift_denominations'
+  | 'shift_tips'
 
 export interface TemplateBlock {
   type: BlockType
@@ -40,6 +46,8 @@ export interface TemplateBlock {
   layout?: 'compact' | 'detailed'
   /** Rótulos sobre las columnas del detalle compacto. */
   show_header?: boolean
+  /** Rótulo de la sección, en los bloques del corte de turno. */
+  show_title?: boolean
   show_unit_price?: boolean
   show_discount?: boolean
   show_change?: boolean
@@ -107,7 +115,21 @@ export const BLOCK_TYPES: BlockType[] = [
   'totals',
   'payments',
   'taxes',
-  'qr'
+  'qr',
+  'shift_sales',
+  'shift_currencies',
+  'shift_cashiers',
+  'shift_denominations',
+  'shift_tips'
+]
+
+/** Los del corte de turno: se ofrecen aparte porque solo sirven en ese papel. */
+export const SHIFT_BLOCKS: BlockType[] = [
+  'shift_sales',
+  'shift_currencies',
+  'shift_cashiers',
+  'shift_denominations',
+  'shift_tips'
 ]
 
 /** Filas que el bloque de totales puede mostrar, en el orden en que se leen. */
@@ -134,6 +156,12 @@ export function newBlock(type: BlockType): TemplateBlock {
       return { type, show: ['subtotal', 'taxes', 'total'] }
     case 'payments':
       return { type, show_change: true }
+    case 'shift_sales':
+    case 'shift_currencies':
+    case 'shift_cashiers':
+    case 'shift_denominations':
+    case 'shift_tips':
+      return { type, show_title: true }
     default:
       return { type }
   }

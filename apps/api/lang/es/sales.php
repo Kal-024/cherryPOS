@@ -17,6 +17,7 @@ return [
     'discount_needs_authorization' => 'El descuento supera tu tope de :limit %. Pedí autorización del supervisor.',
 
     'special_line_not_allowed' => 'No tenés permiso para vender ítems fuera del catálogo.',
+    'special_line_quota' => 'Cupo de ítems temporales consultado.',
     'special_line_limit_reached' => 'Ya usaste los :limit ítems fuera de catálogo del día. Pedí autorización del supervisor.',
     'special_line_notice_title' => ':employee vendió un ítem fuera del catálogo',
     'special_line_notice_body' => '":description" por :amount. Lleva :used de :limit en el día.',

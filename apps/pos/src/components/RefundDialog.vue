@@ -238,10 +238,10 @@ async function confirm() {
 
             <div class="flex gap-2">
               <UFormField :label="t('supervisor.code')" class="grow">
-                <UInput v-model="supervisorCode" />
+                <UInput v-model="supervisorCode" v-only="'code'" />
               </UFormField>
               <UFormField :label="t('supervisor.pin')" class="grow">
-                <UInput v-model="supervisorPin" type="password" />
+                <UInput v-model="supervisorPin" v-only="'digits'" type="password" />
               </UFormField>
             </div>
           </template>

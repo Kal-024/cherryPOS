@@ -261,6 +261,7 @@ function isBelowMin(row: StockRow): boolean {
           >
             <UInput
               v-model="qty"
+              v-only="'signed'"
               inputmode="decimal"
               autofocus
               class="w-full"
@@ -273,7 +274,7 @@ function isBelowMin(row: StockRow): boolean {
             required
             :help="t('inventory.unitCostHint')"
           >
-            <UInput v-model="unitCost" inputmode="decimal" class="w-full" />
+            <UInput v-model="unitCost" v-only="'decimal'" class="w-full" />
           </UFormField>
 
           <UFormField

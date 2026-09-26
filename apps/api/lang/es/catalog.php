@@ -17,6 +17,12 @@ return [
     'product_not_found' => 'Producto no encontrado.',
     'product_created' => 'Producto creado.',
     'product_updated' => 'Producto actualizado.',
+    // Lista 86 (F1-B): se acabó hoy. No es baja de catálogo — el producto sigue
+    // existiendo y vuelve solo al empezar el servicio siguiente.
+    'availability_retrieved' => 'Disponibilidad consultada.',
+    'marked_unavailable' => ':name queda marcado como agotado.',
+    'marked_available' => ':name vuelve a estar disponible.',
+    'product_unavailable' => ':name está agotado: se marcó en cocina y vuelve al abrir el turno siguiente.',
     'product_deactivated' => 'Producto dado de baja.',
     'barcode_required' => 'Indicá el código a leer.',
     'barcode_resolved' => 'Código leído.',

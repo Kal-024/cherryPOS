@@ -9,6 +9,7 @@ import {
   emptyDraft,
   useCatalogAdmin
 } from '../../composables/useCatalogAdmin'
+import { useAvailability } from '../../composables/useAvailability'
 import { useCatalog } from '../../composables/useCatalog'
 import { useOperator } from '../../composables/useOperator'
 import { amount } from '../../utils/money'
@@ -31,8 +32,35 @@ definePage({ meta: { layout: 'admin', permission: 'catalog.product.read' } })
 const { t } = useI18n()
 const admin = useCatalogAdmin()
 const catalog = useCatalog()
+const availability = useAvailability()
 const { can } = useOperator()
 const toast = useToast()
+
+/**
+ * La lista 86 (F1-B): lo que se acabó hoy.
+ *
+ * Vive acá y no en el formulario del producto porque **no es editar el
+ * catálogo**: es decir que hoy no hay. Se marca de un clic, se repone sola al
+ * abrir el turno siguiente, y el histórico y los reportes ni se enteran.
+ *
+ * Desactivar el producto para lo mismo es lo que hay que evitar: eso lo saca de
+ * reportes e importaciones, y alguien tiene que acordarse de reactivarlo.
+ */
+const canMark = computed(() => can('catalog.availability'))
+
+async function toggleAvailability(product: AdminProduct) {
+  try {
+    if (availability.isUnavailable(product.id)) {
+      await availability.restore(product.id)
+      toast.add({ title: t('products.backInStock', { name: product.name }), color: 'success' })
+    } else {
+      await availability.mark(product.id)
+      toast.add({ title: t('products.markedSoldOut', { name: product.name }), color: 'warning' })
+    }
+  } catch (err) {
+    toast.add({ title: firstApiErrorMessage(err), color: 'error' })
+  }
+}
 
 const search = ref('')
 const categoryId = ref<string | null>(null)
@@ -55,7 +83,7 @@ const categoryOptions = computed(() => [
 ])
 
 onMounted(async () => {
-  await Promise.all([admin.loadReferences(), admin.checkOwnership()])
+  await Promise.all([admin.loadReferences(), admin.checkOwnership(), availability.refresh()])
   await refresh()
 })
 
@@ -226,7 +254,11 @@ async function deactivate(product: AdminProduct) {
               {{ amount(product.price) }}
             </td>
             <td class="px-2 py-1">
-              <UBadge v-if="!product.is_active" color="neutral" variant="subtle">
+              <!-- Agotado gana sobre lo demás: es lo que cambia hoy. -->
+              <UBadge v-if="availability.isUnavailable(product.id)" color="warning" variant="subtle">
+                {{ t('products.soldOut') }}
+              </UBadge>
+              <UBadge v-else-if="!product.is_active" color="neutral" variant="subtle">
                 {{ t('products.inactive') }}
               </UBadge>
               <UBadge v-else-if="product.is_exempt" color="info" variant="subtle">
@@ -245,6 +277,18 @@ async function deactivate(product: AdminProduct) {
                 size="xs"
                 :aria-label="t('products.edit')"
                 @click="startEdit(product)"
+              />
+              <!-- Se acabó hoy, no se da de baja: el producto sigue en el
+                   catálogo y vuelve solo al abrir el turno siguiente. -->
+              <UButton
+                v-if="canMark && product.is_active"
+                :icon="availability.isUnavailable(product.id) ? 'i-lucide-package-check' : 'i-lucide-package-x'"
+                :color="availability.isUnavailable(product.id) ? 'success' : 'neutral'"
+                variant="ghost"
+                size="xs"
+                :loading="availability.saving.value"
+                :aria-label="availability.isUnavailable(product.id) ? t('products.markAvailable') : t('products.markSoldOut')"
+                @click="toggleAvailability(product)"
               />
               <UButton
                 v-if="canDeactivate && product.is_active"

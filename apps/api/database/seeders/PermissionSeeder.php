@@ -42,6 +42,10 @@ class PermissionSeeder extends Seeder
             'dining.read' => 'Ver el mapa del salón',
             'dining.serve' => 'Abrir cuentas en mesa, unir y separar mesas',
             'dining.manage' => 'Configurar el salón: zonas, mesas y su disposición',
+            // La lista 86 (F1-B) no es editar el catálogo: es decir que hoy no
+            // hay. Por eso tiene permiso propio — se le puede dar a la cocina
+            // sin darle de paso la edición de precios.
+            'catalog.availability' => 'Marcar productos agotados del día',
             'kitchen.display' => 'Ver la pantalla de cocina',
             'kitchen.update' => 'Marcar comandas como en preparación, listas o servidas',
         ],
@@ -132,6 +136,7 @@ class PermissionSeeder extends Seeder
                 'pos_cash.movement',
                 'pos_exchange_rate.update',
                 'catalog.product.read', 'catalog.product.create', 'catalog.product.update',
+                'catalog.availability',
                 'inventory.read', 'inventory.adjust',
                 'customer.read', 'customer.create', 'customer.update',
                 'credit.read', 'credit.charge', 'credit.payment', 'credit.block',

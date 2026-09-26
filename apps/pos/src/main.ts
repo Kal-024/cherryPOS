@@ -10,6 +10,7 @@ import ui from '@nuxt/ui/vue-plugin'
 
 import App from './App.vue'
 import { i18n } from './i18n'
+import { vOnly } from './directives/only'
 import { useOperator } from './composables/useOperator'
 import { useTerminal } from './composables/useTerminal'
 
@@ -72,6 +73,10 @@ app.use(head)
 app.use(router)
 app.use(ui)
 app.use(i18n)
+
+// `v-only`: una sola regla de tecleo para los cien campos de la aplicación. Ver
+// `directives/only.ts` — cuarenta validaciones sueltas se desincronizan.
+app.directive('only', vOnly)
 
 app.mount('#app')
 

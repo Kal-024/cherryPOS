@@ -179,6 +179,37 @@ class DiningRoomController extends Controller
         ], 200);
     }
 
+    /**
+     * Anota algo sobre la cuenta de la mesa.
+     *
+     * Es del turno, no de la configuración: la escribe quien atiende
+     * (`dining.serve`), en la tablet, mientras el cliente habla.
+     */
+    public function note(Request $request, string $id)
+    {
+        $table = $this->find($request, $id);
+
+        if (! $table) {
+            return response()->json(['message' => __('dining.table_not_found'), 'status' => 404], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'notes' => 'present|nullable|string|max:1000',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->invalid($validator->errors()->toArray());
+        }
+
+        $this->dining->setNote($table, $validator->validated()['notes']);
+
+        return response()->json([
+            'message' => __('dining.note_saved'),
+            'data' => $this->dining->presentTable($table->fresh()),
+            'status' => 200,
+        ], 200);
+    }
+
     public function split(Request $request, string $id)
     {
         $table = $this->find($request, $id);
@@ -213,6 +244,11 @@ class DiningRoomController extends Controller
             'pos_x' => 'nullable|integer',
             'pos_y' => 'nullable|integer',
             'shape' => 'nullable|in:square,round,rect',
+            // El tamaño, en píxeles del plano. Con topes porque un local real no
+            // tiene mesas de doce píxeles ni de mil: fuera de ese rango no es una
+            // mesa, es un dedo que resbaló arrastrando la esquina.
+            'width' => 'nullable|integer|min:60|max:600',
+            'height' => 'nullable|integer|min:60|max:600',
             'is_active' => 'boolean',
         ];
     }

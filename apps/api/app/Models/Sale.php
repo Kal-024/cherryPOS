@@ -34,6 +34,10 @@ class Sale extends Model
     protected $fillable = [
         'id', 'branch_id', 'terminal_id', 'shift_id', 'employee_id', 'customer_id',
         'sale_type', 'status', 'label', 'series_id', 'number',
+        // Nota del servicio, no de la cocina: la de cocina es de la línea.
+        'notes',
+        // Cuándo se imprimió la precuenta: la mesa pasó a "están por irse".
+        'bill_requested_at',
         'currency_code', 'exchange_rate',
         'gross', 'line_discount_total', 'sale_discount', 'discount_total',
         'subtotal', 'taxable_base', 'exempt_total', 'tax_total', 'total',
@@ -50,6 +54,7 @@ class Sale extends Model
 
     protected $casts = [
         'guests' => 'integer',
+        'bill_requested_at' => 'datetime',
         'opened_at' => 'datetime',
         'closed_at' => 'datetime',
         'recorded_at' => 'datetime',

@@ -27,13 +27,15 @@ class DiningTable extends Model
 
     protected $fillable = [
         'branch_id', 'area_id', 'code', 'name', 'seats',
-        'pos_x', 'pos_y', 'shape', 'merged_into_id', 'is_active',
+        'pos_x', 'pos_y', 'shape', 'width', 'height', 'merged_into_id', 'is_active',
     ];
 
     protected $casts = [
         'seats' => 'integer',
         'pos_x' => 'integer',
         'pos_y' => 'integer',
+        'width' => 'integer',
+        'height' => 'integer',
         'is_active' => 'boolean',
     ];
 

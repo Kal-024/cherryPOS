@@ -64,11 +64,16 @@ async function submit() {
 
       <form class="flex flex-col gap-3" @submit.prevent="submit">
         <UFormField :label="t('terminal.branchCode')">
-          <UInput v-model="branchCode" autofocus autocomplete="off" />
+          <UInput
+            v-model="branchCode"
+            v-only="'code'"
+            autofocus
+            autocomplete="off"
+          />
         </UFormField>
 
         <UFormField :label="t('terminal.terminalCode')">
-          <UInput v-model="terminalCode" autocomplete="off" />
+          <UInput v-model="terminalCode" v-only="'code'" autocomplete="off" />
         </UFormField>
 
         <UFormField :label="t('terminal.secret')">

@@ -1,4 +1,5 @@
 import { config } from '@vue/test-utils'
+import { vi } from 'vitest'
 import { i18n } from '../i18n'
 
 /**
@@ -17,6 +18,13 @@ const passthrough = (tag: string) => ({
   inheritAttrs: false,
   template: `<${tag} v-bind="$attrs"><slot /></${tag}>`
 })
+
+/**
+ * `useToast` lo auto-importa el plugin de Nuxt UI en la aplicación, y acá no hay
+ * plugin. Sin este doble, cualquier componente que avise algo revienta al
+ * montarse — y avisar es justo lo que hace media caja.
+ */
+vi.stubGlobal('useToast', () => ({ add: vi.fn(), remove: vi.fn(), clear: vi.fn() }))
 
 config.global.plugins = [i18n]
 
@@ -69,5 +77,12 @@ config.global.stubs = {
     template: '<label>{{ label }}{{ description }}<input type="checkbox" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" /></label>'
   },
   UCard: { template: '<div><slot /></div>' },
+  // Las pestañas se dibujan como botones: lo que las pruebas necesitan es poder
+  // cambiar de una a otra, no el marcado de la biblioteca.
+  UTabs: {
+    props: ['modelValue', 'items'],
+    emits: ['update:modelValue'],
+    template: '<div><button v-for="(item, index) in items" :key="index" type="button" @click="$emit(\'update:modelValue\', item.value ?? item)">{{ item.label ?? item }}</button></div>'
+  },
   UModal: { template: '<div><slot name="body" /><slot name="footer" /></div>' }
 }

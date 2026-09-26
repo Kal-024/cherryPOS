@@ -84,6 +84,8 @@ export default {
     price: 'Precio',
     lineTotal: 'Importe',
     remove: 'Quitar línea',
+    soldOut: 'Agotado',
+    unavailable: '{name} está agotado hoy.',
     catalogWarming: 'Cargando el catálogo… un momento',
     notFound: 'No se encontró "{term}"',
     favourites: 'Más vendidos',
@@ -169,6 +171,7 @@ export default {
     qtyMove: 'Elegir línea',
     multiply: 'Cantidad y producto: 3* y el lector, o 3*queso',
     customer: 'Elegir cliente',
+    special: 'Vender algo sin catálogo',
     clear: 'Limpiar búsqueda',
     focus: 'Volver a la búsqueda',
     hint: 'Ninguna operación necesita el ratón.'
@@ -257,6 +260,12 @@ export default {
     active: 'A la venta',
     activeHint: 'Apagado, deja de aparecer en la caja sin borrarse del histórico.',
     inactive: 'Dado de baja',
+    // Lista 86: se acabó hoy. No es baja de catálogo.
+    soldOut: 'Agotado',
+    markSoldOut: 'Marcar agotado hoy',
+    markAvailable: 'Volvió a haber',
+    markedSoldOut: '{name} queda agotado. Vuelve al abrir el turno siguiente.',
+    backInStock: '{name} vuelve a estar disponible.',
     service: 'Servicio',
     status: 'Estado',
     ownedByErp: 'El catálogo lo administra el ERP',
@@ -463,14 +472,25 @@ export default {
       totals: 'Totales',
       payments: 'Pagos',
       taxes: 'Desglose de impuestos',
-      qr: 'Código QR'
+      qr: 'Código QR',
+      shift_sales: 'Ventas del turno',
+      shift_currencies: 'Arqueo por moneda',
+      shift_cashiers: 'Ventas por cajero',
+      shift_denominations: 'Conteo por denominación',
+      shift_tips: 'Propinas del turno'
     },
     blockHint: {
       logo: 'El logo del negocio, tal como vino con la licencia.',
       separator: 'Una línea de guiones a lo ancho del papel.',
       taxes: 'El desglose por código de impuesto, con su base y su monto.',
-      qr: 'Código con el identificador del ticket, para consultarlo después.'
+      qr: 'Código con el identificador del ticket, para consultarlo después.',
+      shift_sales: 'Cuántos tickets, por cuánto y en qué medio de pago. Un turno sin ventas imprime cero.',
+      shift_currencies: 'Lo esperado, lo contado y la diferencia con su signo, por cada moneda del turno.',
+      shift_cashiers: 'Qué vendió cada cajero dentro del mismo turno.',
+      shift_denominations: 'Billetes y monedas contados al cerrar. Es lo que convierte «falta plata» en «faltan tres de 50».',
+      shift_tips: 'La propina del turno y de quién es. No se imprime si no hubo.'
     },
+    showTitle: 'Rótulo de la sección',
     total: {
       subtotal: 'Subtotal',
       exempt_total: 'Exento',
@@ -796,6 +816,11 @@ export default {
   },
   floorPlan: {
     addArea: 'Nueva zona',
+    zoomIn: 'Acercar',
+    zoomOut: 'Alejar',
+    zoomReset: 'Volver al 100 %',
+    resize: 'Cambiar el tamaño de la mesa',
+    size: '{width} × {height}',
     addTable: 'Nueva mesa',
     removeTable: 'Dar de baja la mesa',
     code: 'Código',
@@ -835,6 +860,26 @@ export default {
     byCurrency: 'Esperado, contado y diferencia',
     byCashier: 'Por cajero',
     settlements: 'Ajustes asentados'
+  },
+  special: {
+    action: 'Sin catálogo',
+    title: 'Vender algo que no está en el catálogo',
+    temporary: 'Producto sin catálogo',
+    amount: 'Cobrar un monto',
+    temporaryHint: 'Mercadería que se vendió y todavía no está cargada. Lleva cantidad y precio unitario.',
+    amountHint: 'Un importe suelto: mano de obra, un servicio, un ajuste. Sin cantidad, porque no hay unidades que contar.',
+    description: 'Qué es',
+    descriptionHint: 'Es lo único que queda en el ticket y en el reporte.',
+    descriptionPlaceholder: 'Ej.: Escoba plástica grande',
+    price: 'Precio unitario',
+    total: 'Importe',
+    qty: 'Cantidad',
+    quota: 'Usaste {used} de {limit} hoy.',
+    quotaUnlimited: 'Sin límite diario configurado.',
+    notifies: 'El supervisor recibe el aviso',
+    notifiesHint: 'Siempre, con el detalle y el importe. No bloquea la caja.',
+    needsAuthorization: 'Hace falta el PIN de autorización del supervisor, en esta misma terminal.',
+    add: 'Agregar a la venta'
   },
   supervisor: {
     code: 'Código de supervisor',
@@ -881,7 +926,21 @@ export default {
     mergeHint: 'Las mesas unidas se cobran juntas. Solo se pueden unir mesas libres.',
     mergeMainTable: 'Mesa principal',
     mergeMain: 'Mesas a unir',
-    splitOf: 'Separar {code}',
+    mergeWith: 'Unir con otra mesa…',
+    // Separar una sola o deshacer el grupo entero: con tres mesas empujadas
+    // contra una, devolver una a su sitio no debería deshacer las otras dos.
+    splitThis: 'Separar esta mesa',
+    splitGroup: 'Deshacer el grupo',
+    viewAccount: 'Ver la cuenta',
+    menuHint: 'Clic derecho en una mesa —o dejá el dedo apoyado— para unir, separar o anotar.',
+    tableNote: 'Nota de la mesa',
+    printBill: 'Imprimir la cuenta',
+    // Cuenta pedida: los únicos que esperan al mesero y no a la cocina.
+    billBadge: 'Cuenta · {count} min',
+    waitingToPay: 'Pidió la cuenta hace {count} min',
+    noteHint: 'Lo que quieras tener a mano mientras atendés. Se borra al cobrar la cuenta.',
+    notePlaceholder: 'Cumpleaños, apurados, paga el de la camisa azul…',
+    noteSave: 'Guardar nota',
     sendToKitchen: 'Mandar a cocina',
     sent: 'Comanda enviada',
     nothingPending: 'No hay nada nuevo que mandar'
@@ -905,6 +964,10 @@ export default {
     stateCooking: 'En cocina',
     stateReady: 'Listo para servir',
     stateHeld: 'Curso retenido',
+    // Versión corta: en el distintivo de la ficha no entra "Listo para servir".
+    badgeCooking: 'Cocina',
+    badgeReady: '¡Listo!',
+    badgeHeld: 'Retenido',
     // El botón dice el siguiente paso, no el estado actual: se toca sin leer.
     start: 'Empezar',
     ready: 'Lista',

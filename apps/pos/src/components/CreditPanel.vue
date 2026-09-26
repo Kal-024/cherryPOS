@@ -146,7 +146,7 @@ async function showStatement() {
 
       <form v-if="canManage" class="flex flex-wrap items-end gap-2" @submit.prevent="openAccount">
         <UFormField :label="t('credit.limit')" required>
-          <UInput v-model="limitDraft" inputmode="decimal" class="w-36" />
+          <UInput v-model="limitDraft" v-only="'decimal'" class="w-36" />
         </UFormField>
 
         <UFormField :label="t('credit.cutOffDay')" :help="t('credit.cutOffDayHint')">
@@ -190,7 +190,7 @@ async function showStatement() {
       <!-- Abono en caja, total o parcial. El dinero entra al cajón del turno. -->
       <form v-if="canPay" class="flex flex-wrap items-end gap-2" @submit.prevent="pay">
         <UFormField :label="t('credit.payment')" required>
-          <UInput v-model="paymentDraft" inputmode="decimal" class="w-36" />
+          <UInput v-model="paymentDraft" v-only="'decimal'" class="w-36" />
         </UFormField>
 
         <UFormField :label="t('credit.comment')" class="grow">

@@ -162,7 +162,100 @@ test.describe('Salón y cocina', () => {
 
     // Unidas se dibujan pegadas: dos mesas que comparten cuenta y siguen cada
     // una en su rincón no se leen como una sola unidad.
-    await expect(page.getByRole('button', { name: /Separar/ })).toBeVisible()
+    //
+    // Separar se pide **sobre la mesa**, con clic derecho: el botón al pie del
+    // salón deshacía el grupo entero y no dejaba elegir cuál se suelta.
+    await page.locator('[data-table-id]').filter({ hasText: 'Mesa 3' }).click({ button: 'right' })
+    await expect(page.getByRole('menuitem', { name: 'Separar esta mesa' })).toBeVisible()
+    await page.keyboard.press('Escape')
+  })
+
+  test('3d · unir un grupo a una tercera mesa, y soltar una sola', async () => {
+    await page.goto('/salon')
+
+    // El caso que se reportó: la 3 y la 4 ya unidas, y la principal arrastrada
+    // sobre la 2. Quedaba la cadena 4 → 3 → 2 y la 4 se caía del grupo, sin
+    // color de unida y sin forma de soltarse.
+    const origen = page.locator('[data-table-id]').filter({ hasText: 'Mesa 4' })
+    const destino = page.locator('[data-table-id]').filter({ hasText: 'Mesa 2' })
+
+    const desde = await origen.boundingBox()
+    const hasta = await destino.boundingBox()
+
+    await page.mouse.move((desde?.x ?? 0) + 40, (desde?.y ?? 0) + 40)
+    await page.mouse.down()
+    await page.mouse.move((hasta?.x ?? 0) + 30, (hasta?.y ?? 0) + 30, { steps: 8 })
+    await page.mouse.move((hasta?.x ?? 0) + 50, (hasta?.y ?? 0) + 50, { steps: 4 })
+    await page.mouse.up()
+
+    await expect(page.getByText('Mesas unidas').first()).toBeVisible()
+
+    // Las tres son un solo grupo: la que mandaba dejó de mandar y sus unidas
+    // pasaron a la nueva principal.
+    await expect(page.locator('[data-table-id]').filter({ hasText: 'Mesa 3' })).toContainText('Unida')
+    await expect(page.locator('[data-table-id]').filter({ hasText: 'Mesa 4' })).toContainText('Unida')
+
+    // Se suelta una y el resto sigue junto.
+    await page.locator('[data-table-id]').filter({ hasText: 'Mesa 3' }).click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Separar esta mesa' }).click()
+
+    await expect(page.locator('[data-table-id]').filter({ hasText: 'Mesa 3' })).not.toContainText('Unida')
+    await expect(page.locator('[data-table-id]').filter({ hasText: 'Mesa 4' })).toContainText('Unida')
+
+    // El salón queda como estaba: es el mismo local para los guiones que siguen.
+    await page.locator('[data-table-id]').filter({ hasText: 'Mesa 2' }).click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Deshacer el grupo' }).click()
+
+    await expect(page.locator('[data-table-id]').filter({ hasText: 'Mesa 4' })).not.toContainText('Unida')
+  })
+
+  test('3e · la nota de la cuenta queda en la mesa y sobrevive al refresco', async () => {
+    await page.goto('/salon')
+
+    // La libreta del mesero: se escribe de pie, en la tablet, mientras el
+    // cliente habla. Existía la nota de línea —la que va a la comanda— y no
+    // había dónde anotar lo del servicio.
+    await page.locator('[data-table-id]').filter({ hasText: 'Mesa 1' }).click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Nota de la mesa' }).click()
+
+    await page.getByPlaceholder(/Cumpleaños/).fill('Cumpleaños: el postre con vela')
+    await page.getByRole('button', { name: 'Guardar nota' }).click()
+
+    // El mapa se relee por sondeo cada cinco segundos (G-13): la nota vuelve del
+    // servidor, no se queda en la pantalla.
+    await page.reload()
+
+    await page.locator('[data-table-id]').filter({ hasText: 'Mesa 1' }).click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Nota de la mesa' }).click()
+
+    await expect(page.getByPlaceholder(/Cumpleaños/)).toHaveValue('Cumpleaños: el postre con vela')
+
+    // Vaciar el campo la borra: un segundo botón para eso sería un botón más que
+    // buscar con el cliente esperando.
+    await page.getByPlaceholder(/Cumpleaños/).fill('')
+    await page.getByRole('button', { name: 'Guardar nota' }).click()
+  })
+
+  test('3f · la cuenta se imprime antes de cobrar y la mesa lo dice', async () => {
+    await page.goto('/salon')
+
+    // En un restaurante el cliente pide ver lo consumido **antes** de pagar. No
+    // había forma de hacerlo: el único papel era el comprobante, que sale al
+    // cobrar.
+    await page.locator('[data-table-id]').filter({ hasText: 'Mesa 1' }).click({ button: 'right' })
+
+    const [pdf] = await Promise.all([
+      page.waitForEvent('popup'),
+      page.getByRole('menuitem', { name: 'Imprimir la cuenta' }).click()
+    ])
+
+    await pdf.close()
+
+    // Imprimirla cambia el estado de la mesa: de "están comiendo" a "están por
+    // irse". Es el dato que decide a quién atender primero con gente en la
+    // puerta, y se deduce del gesto en vez de pedir un segundo botón.
+    await expect(page.locator('[data-table-id]').filter({ hasText: 'Mesa 1' }))
+      .toContainText('Cuenta')
   })
 
   test('4 · los cursos: el postre se pide ya y sale después', async ({ browser }) => {

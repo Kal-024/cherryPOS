@@ -15,6 +15,8 @@ return [
     'merge_busy' => 'La mesa :code tiene cuenta abierta: cobrala o traspasala antes de unir.',
     'tables_merged' => 'Mesas unidas.',
     'tables_split' => 'Mesas separadas.',
+    'note_saved' => 'Nota guardada.',
+    'note_needs_tab' => 'La mesa no tiene cuenta abierta: la nota va con la cuenta.',
     'product_without_modifiers' => ':name no admite modificadores.',
     'modifier_not_allowed' => 'Ese modificador no pertenece a :name.',
     'modifier_required' => 'Falta elegir en «:group» (al menos :min).',

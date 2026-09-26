@@ -33,7 +33,36 @@ class ReceiptRenderer
             $lines = array_merge($lines, $this->renderBlock($block, $context, $width));
         }
 
-        return $lines;
+        return $this->tidy($lines);
+    }
+
+    /**
+     * Quita las rayas que quedaron pegadas y la que abriría el papel.
+     *
+     * Un bloque que calla porque no tiene datos —el conteo de un turno sin
+     * arqueo, los impuestos de una venta exenta— deja sus dos separadores juntos,
+     * y dos rayas seguidas se leen como una impresora que repitió una línea. La
+     * plantilla no puede preverlo: solo acá se sabe qué bloque quedó vacío.
+     *
+     * @param  array<int,array<string,mixed>>  $lines
+     * @return array<int,array<string,mixed>>
+     */
+    private function tidy(array $lines): array
+    {
+        $tidy = [];
+
+        foreach ($lines as $line) {
+            $previous = end($tidy);
+
+            if (($line['kind'] ?? '') === 'separator'
+                && ($previous === false || ($previous['kind'] ?? '') === 'separator')) {
+                continue;
+            }
+
+            $tidy[] = $line;
+        }
+
+        return array_values($tidy);
     }
 
     /**
@@ -53,6 +82,14 @@ class ReceiptRenderer
             'totals' => $this->totals($block, $context, $width),
             'payments' => $this->payments($block, $context, $width),
             'taxes' => $this->taxes($context, $width),
+            // El corte de turno (H4). Son listas —monedas, cajeros,
+            // denominaciones— y ningún bloque sabía recorrerlas: el desglose se
+            // calculaba entero y no tenia por donde salir al papel.
+            'shift_sales' => $this->shiftSales($block, $context, $width),
+            'shift_currencies' => $this->shiftCurrencies($block, $context, $width),
+            'shift_cashiers' => $this->shiftCashiers($block, $context, $width),
+            'shift_denominations' => $this->shiftDenominations($block, $context, $width),
+            'shift_tips' => $this->shiftTips($block, $context, $width),
             'qr' => [['kind' => 'qr', 'value' => $this->interpolate($block['content'] ?? '', $context)]],
             default => [],
         };
@@ -148,12 +185,7 @@ class ReceiptRenderer
         $descWidth = max(8, $width - $amountWidth - $qtyWidth - 2);
 
         /** Tres celdas en sus columnas: el formato de la fila y el del encabezado. */
-        $row = fn (string $left, string $middle, string $right): string => sprintf(
-            '%s %s %s',
-            $this->pad(mb_substr($left, 0, $descWidth), $descWidth),
-            $this->pad(mb_substr($middle, 0, $qtyWidth), $qtyWidth, left: true),
-            $this->pad(mb_substr($right, 0, $amountWidth), $amountWidth, left: true)
-        );
+        $row = $this->grid($width, $qtyWidth, $amountWidth);
 
         // **Las columnas se rotulan.** Una raya sola no dice qué es cada número:
         // el cliente que revisa su ticket tiene que poder saber, sin preguntar,
@@ -346,6 +378,283 @@ class ReceiptRenderer
     }
 
     /**
+     * Resumen de ventas del turno (H4).
+     *
+     * Es lo primero que alguien busca en un corte: cuántos tickets salieron y
+     * por cuánto. Después el desglose por medio de pago, que es lo que dice
+     * cuánta de esa plata tiene que estar **en el cajón** y cuánta se fue en
+     * tarjeta o quedó a crédito — sin él, el arqueo parece faltar justo el monto
+     * de las tarjetas del día.
+     *
+     * **Un turno sin ventas imprime cero, no nada.** Es la excepción a la regla
+     * de callar cuando no hay datos: un corte en blanco no se distingue de una
+     * impresora que falló, y el papel se archiva igual.
+     */
+    private function shiftSales(array $block, array $context, int $width): array
+    {
+        $sales = $context['sales'] ?? null;
+
+        // La clave `count` es lo que distingue el contexto de un turno del de una
+        // venta: puesto en una plantilla de ticket, el bloque no imprime nada en
+        // vez de inventar ceros.
+        if (! is_array($sales) || ! array_key_exists('count', $sales)) {
+            return [];
+        }
+
+        $lines = $this->sectionTitle($block, 'receipt.sales_summary');
+
+        $lines[] = $this->amount(__('receipt.tickets'), (string) $sales['count'], $width);
+        $lines[] = $this->amount(__('receipt.sales_total'), (string) ($sales['total'] ?? '0.00'), $width);
+
+        if (bccomp((string) ($sales['tax_total'] ?? '0'), '0', 2) !== 0) {
+            $lines[] = $this->amount(__('receipt.tax_total'), (string) $sales['tax_total'], $width);
+        }
+
+        foreach ($sales['by_method'] ?? [] as $method => $total) {
+            $lines[] = $this->amount(
+                '  '.__('receipt.payment_method.'.$method),
+                (string) $total,
+                $width
+            );
+        }
+
+        return $lines;
+    }
+
+    /**
+     * El arqueo por moneda: esperado, contado y diferencia (H4, Q-06).
+     *
+     * Va en vertical y no en columnas porque son tres importes por moneda, y en
+     * 32 caracteres no entran cuatro celdas legibles. Un corte se lee con
+     * atención —se firma y se archiva—, así que el renglón de más vale acá lo
+     * que no valdría en un ticket de mostrador.
+     *
+     * **El signo de la diferencia se imprime.** Sobrar no es faltar, aunque las
+     * dos descuadren: sin el signo, quien archiva el papel no sabe si el cajero
+     * debe plata o si le sobró.
+     */
+    private function shiftCurrencies(array $block, array $context, int $width): array
+    {
+        $rows = $context['currencies'] ?? [];
+
+        if ($rows === []) {
+            return [];
+        }
+
+        $lines = $this->sectionTitle($block, 'receipt.cash_count');
+
+        foreach ($rows as $row) {
+            $lines[] = $this->groupTitle((string) $row['currency_code']);
+            $lines[] = $this->amount('  '.__('receipt.expected'), (string) $row['expected'], $width);
+            $lines[] = $this->amount('  '.__('receipt.counted'), (string) $row['counted'], $width);
+
+            $difference = (string) $row['difference'];
+
+            $lines[] = [
+                'kind' => 'shift_difference',
+                'text' => $this->pair('  '.__('receipt.difference'), $this->signed($difference), $width),
+                // El descuadre va en negrita: es el único renglón del corte que
+                // obliga a alguien a hacer algo.
+                'bold' => bccomp($difference, '0', 2) !== 0,
+            ];
+        }
+
+        return $lines;
+    }
+
+    /**
+     * Ventas por cajero (D-05).
+     *
+     * El turno es del equipo sobre un cajón físico, pero cada venta queda
+     * atribuida a su cajero: este bloque es el que permite el relevo sin contar
+     * el cajón, porque dice quién vendió cuánto dentro del mismo turno.
+     */
+    private function shiftCashiers(array $block, array $context, int $width): array
+    {
+        $rows = $context['cashiers'] ?? [];
+
+        if ($rows === []) {
+            return [];
+        }
+
+        $row = $this->grid($width, 5, $width >= 40 ? 12 : 10);
+        $lines = $this->sectionTitle($block, 'receipt.by_cashier');
+
+        $lines[] = [
+            'kind' => 'shift_header',
+            'text' => $row(__('receipt.cashier'), __('receipt.tickets_short'), __('receipt.amount')),
+            'align' => 'left',
+            'bold' => true,
+            'size' => 'md',
+        ];
+
+        foreach ($rows as $item) {
+            $lines[] = [
+                'kind' => 'shift_cashier',
+                'text' => $row(
+                    (string) ($item['employee_name'] ?? $item['employee_code'] ?? ''),
+                    (string) $item['sales'],
+                    (string) $item['total']
+                ),
+            ];
+        }
+
+        return $lines;
+    }
+
+    /**
+     * El conteo por denominación (D-06).
+     *
+     * Es el desglose que convierte "falta plata" en "faltan tres billetes de
+     * 50". Se agrupa por moneda solo cuando hay más de una: el rótulo "NIO"
+     * sobre la única moneda del local es ruido.
+     */
+    private function shiftDenominations(array $block, array $context, int $width): array
+    {
+        $rows = $context['denominations'] ?? [];
+
+        if ($rows === []) {
+            return [];
+        }
+
+        $row = $this->grid($width, 5, $width >= 40 ? 12 : 10);
+        $lines = $this->sectionTitle($block, 'receipt.denominations');
+
+        $lines[] = [
+            'kind' => 'shift_header',
+            'text' => $row(__('receipt.denomination'), __('receipt.count'), __('receipt.amount')),
+            'align' => 'left',
+            'bold' => true,
+            'size' => 'md',
+        ];
+
+        $currencies = array_unique(array_column($rows, 'currency_code'));
+        $multi = count($currencies) > 1;
+        $current = null;
+
+        foreach ($rows as $item) {
+            if ($multi && $item['currency_code'] !== $current) {
+                $current = $item['currency_code'];
+                $lines[] = $this->groupTitle((string) $current);
+            }
+
+            $lines[] = [
+                'kind' => 'shift_denomination',
+                'text' => $row(
+                    $this->plain((string) $item['denomination']),
+                    (string) $item['count'],
+                    (string) $item['subtotal']
+                ),
+            ];
+        }
+
+        return $lines;
+    }
+
+    /**
+     * Propinas del turno (G-16).
+     *
+     * Ya están contadas dentro de lo esperado en el cajón —es dinero que
+     * entró—, así que el arqueo cuadra sin tocarlas. Van en el papel porque al
+     * cerrar hay que **sacarlas** y entregarlas, y sin este renglón el
+     * supervisor tendría que ir ticket por ticket para saber cuánto.
+     */
+    private function shiftTips(array $block, array $context, int $width): array
+    {
+        $tips = $context['tips'] ?? null;
+
+        if (! is_array($tips) || bccomp((string) ($tips['total'] ?? '0'), '0', 2) === 0) {
+            return [];
+        }
+
+        $lines = $this->sectionTitle($block, 'receipt.tips');
+
+        $lines[] = [
+            'kind' => 'shift_tip_total',
+            'text' => $this->pair(__('receipt.tip_total'), (string) $tips['total'], $width),
+            'bold' => true,
+        ];
+
+        foreach ($tips['by_employee'] ?? [] as $item) {
+            $lines[] = $this->amount(
+                '  '.((string) ($item['employee_name'] ?? '') ?: __('receipt.tip_unassigned')),
+                (string) $item['total'],
+                $width
+            );
+        }
+
+        return $lines;
+    }
+
+    /**
+     * El rótulo de una sección del corte.
+     *
+     * Un corte sin rótulos es una columna de números sin dueño: quien lo archiva
+     * no puede saber si "1,234.00" es lo que se esperaba en el cajón o lo que se
+     * vendió. Se apaga por bloque, para quien arme el suyo a mano.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function sectionTitle(array $block, string $key): array
+    {
+        if (! ($block['show_title'] ?? true)) {
+            return [];
+        }
+
+        return [[
+            'kind' => 'section',
+            'text' => __($key),
+            'align' => 'left',
+            'bold' => true,
+            'size' => 'md',
+        ]];
+    }
+
+    /** Encabezado de un grupo dentro de una sección: la moneda, casi siempre. */
+    private function groupTitle(string $text): array
+    {
+        return ['kind' => 'shift_group', 'text' => $text, 'align' => 'left', 'bold' => true, 'size' => 'md'];
+    }
+
+    /** Un renglón de etiqueta e importe, que es la forma de casi todo el corte. */
+    private function amount(string $label, string $value, int $width): array
+    {
+        return ['kind' => 'amount', 'text' => $this->pair($label, $value, $width)];
+    }
+
+    /**
+     * Tres columnas: la primera cede, las otras dos se respetan.
+     *
+     * El importe manda —es lo que se revisa— y la descripción cede lo que haga
+     * falta: un nombre recortado se entiende, un importe recortado no sirve de
+     * nada. Lo usan el detalle de la venta y las listas del corte, y por eso
+     * vive acá y no dentro de uno de los dos.
+     */
+    private function grid(int $width, int $middle, int $right): callable
+    {
+        $left = max(8, $width - $middle - $right - 2);
+
+        return fn (string $a, string $b, string $c): string => sprintf(
+            '%s %s %s',
+            $this->pad(mb_substr($a, 0, $left), $left),
+            $this->pad(mb_substr($b, 0, $middle), $middle, left: true),
+            $this->pad(mb_substr($c, 0, $right), $right, left: true)
+        );
+    }
+
+    /** Lo que sobra se imprime con su signo: sobrar no es faltar. */
+    private function signed(string $amount): string
+    {
+        return bccomp($amount, '0', 2) === 1 ? '+'.$amount : $amount;
+    }
+
+    /** "1000.00" se lee mejor como "1000"; "0.25" se queda como está. */
+    private function plain(string $number): string
+    {
+        return str_contains($number, '.') ? rtrim(rtrim($number, '0'), '.') : $number;
+    }
+
+    /**
      * Reemplaza `{{ruta.al.dato}}` por su valor y `{{t:clave}}` por su
      * traducción.
      *
@@ -433,7 +742,11 @@ class ReceiptRenderer
      */
     public function validate(array $content): void
     {
-        $known = ['text', 'logo', 'separator', 'spacer', 'field_list', 'items', 'totals', 'payments', 'taxes', 'qr'];
+        $known = [
+            'text', 'logo', 'separator', 'spacer', 'field_list', 'items', 'totals', 'payments', 'taxes', 'qr',
+            // Corte de turno (H4).
+            'shift_sales', 'shift_currencies', 'shift_cashiers', 'shift_denominations', 'shift_tips',
+        ];
         $blocks = $content['blocks'] ?? null;
 
         if (! is_array($blocks) || $blocks === []) {

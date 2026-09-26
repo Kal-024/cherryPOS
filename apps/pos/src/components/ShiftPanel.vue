@@ -196,6 +196,7 @@ function differenceLabel(difference: string): string {
       <UFormField :label="t('shiftUi.openingFloat')">
         <UInput
           v-model="openingFloat"
+          v-only="'decimal'"
           type="number"
           step="0.01"
           min="0"

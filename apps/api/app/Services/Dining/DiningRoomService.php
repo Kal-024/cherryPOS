@@ -81,6 +81,10 @@ class DiningRoomService
             'pos_x' => $table->pos_x,
             'pos_y' => $table->pos_y,
             'shape' => $table->shape,
+            // El tamaño viaja con el mapa: un local real no tiene todas las mesas
+            // iguales, y sin esto el plano se parece al salón por casualidad.
+            'width' => $table->width,
+            'height' => $table->height,
             'merged_into_id' => $table->merged_into_id,
             // Libre, ocupada o absorbida por otra mesa. Se deduce, no se guarda.
             'state' => $table->isMerged() ? 'merged' : ($sale ? 'occupied' : 'free'),
@@ -89,6 +93,13 @@ class DiningRoomService
                 'label' => $sale->label,
                 'total' => (string) $sale->total,
                 'guests' => $sale->guests,
+                // La nota viaja con el mapa: sin ella la mesa no puede marcar
+                // que hay algo escrito, y una nota que nadie ve no sirve de nada.
+                'notes' => $sale->notes,
+                // Cuenta pedida: la mesa pasó de "están comiendo" a "están por
+                // irse". El mapa muestra cuánto lleva esperando pagar, que es lo
+                // que hace accionable el dato.
+                'bill_requested_at' => $sale->bill_requested_at,
                 // El tiempo transcurrido es la mitad del mapa: una mesa de hace
                 // dos horas necesita atención distinta que una de cinco minutos.
                 'opened_at' => $sale->opened_at,
@@ -177,12 +188,48 @@ class DiningRoomService
     }
 
     /**
+     * Anota algo sobre la cuenta abierta (F1-B, §10).
+     *
+     * Es la libreta del mesero: «cumpleaños», «apurados», «paga el de la camisa
+     * azul». No es la nota de la línea —esa va a la comanda y es de la cocina—
+     * ni una nota de la mesa: se escribe sobre la **cuenta**, y por eso se va con
+     * ella al cobrar, que es toda la vida útil que tiene.
+     *
+     * Sin cuenta abierta no hay dónde anotar. Guardar la nota en la mesa para
+     * cubrir ese caso la haría sobrevivir al cliente, y entonces alguien tendría
+     * que acordarse de borrarla.
+     */
+    public function setNote(DiningTable $table, ?string $note): Sale
+    {
+        $sale = $table->openSale;
+
+        if (! $sale) {
+            throw ValidationException::withMessages(['table' => __('dining.note_needs_tab')]);
+        }
+
+        // Una nota en blanco es ninguna nota: así el mesero la borra sin un
+        // segundo botón que preguntar si está seguro.
+        $note = trim((string) $note);
+
+        $sale->forceFill(['notes' => $note === '' ? null : $note])->save();
+
+        return $sale->fresh();
+    }
+
+    /**
      * Une mesas: una manda y las demás quedan absorbidas.
      *
      * Si alguna de las absorbidas ya tenía cuenta, sus líneas **no** se mueven
      * solas: hacerlo en silencio cambiaría el importe de dos cuentas a la vez.
      * Se exige que estén libres, y quien ya sirvió en las dos cobra una y
      * traspasa a mano.
+     *
+     * **Un grupo que se une a otro se funde en uno solo.** Arrastrar la principal
+     * de un grupo sobre una tercera mesa dejaba a sus unidas apuntando a una mesa
+     * que a su vez estaba unida —la cadena 4 → 3 → 2—, y todo el salón mira **un
+     * solo salto**: la 4 quedaba fuera del grupo, sin color de unida y sin forma
+     * de soltarse. Las unidas pasan a la nueva principal, que es lo que el mesero
+     * ve cuando empuja dos mesas contra una tercera: una sola unidad de tres.
      *
      * @param  array<int,string>  $tableIds
      */
@@ -212,6 +259,12 @@ class DiningRoomService
 
         DB::transaction(function () use ($main, $others) {
             foreach ($others as $other) {
+                // Las que ya dependían de la absorbida pasan a la nueva
+                // principal: sin esto queda una cadena y `merged_into_id` deja de
+                // significar "la mesa que manda".
+                DiningTable::where('merged_into_id', $other->id)
+                    ->update(['merged_into_id' => $main->id, 'updated_at' => now()]);
+
                 $other->forceFill(['merged_into_id' => $main->id])->save();
             }
         });
@@ -219,13 +272,31 @@ class DiningRoomService
         return $main->fresh();
     }
 
-    /** Separa el grupo. Las mesas vuelven a aceptar cuenta propia. */
-    public function split(DiningTable $main): DiningTable
+    /**
+     * Suelta mesas del grupo. Las sueltas vuelven a aceptar cuenta propia.
+     *
+     * **Qué se suelta depende de cuál mesa llega.** Si es una unida, se suelta
+     * solo ella y el resto del grupo sigue junto: con tres mesas empujadas contra
+     * una, devolver una sola a su sitio obligaba a separar las cuatro y rearmar
+     * a mano lo que nadie quiso deshacer. Si es la principal, se disuelve el
+     * grupo entero, que es lo que hacía siempre.
+     */
+    public function split(DiningTable $table): DiningTable
     {
-        DiningTable::where('merged_into_id', $main->id)
+        if ($table->isMerged()) {
+            $main = $table->mergedInto;
+
+            $table->forceFill(['merged_into_id' => null])->save();
+
+            // Se devuelve la principal y no la suelta: quien llamó espera saber
+            // cómo quedó el grupo, que es lo que el mapa vuelve a dibujar.
+            return ($main ?? $table)->fresh();
+        }
+
+        DiningTable::where('merged_into_id', $table->id)
             ->update(['merged_into_id' => null, 'updated_at' => now()]);
 
-        return $main->fresh();
+        return $table->fresh();
     }
 
     private function defaultLabel(DiningTable $table): string

@@ -17,6 +17,7 @@ return [
     'discount_needs_authorization' => 'The discount exceeds your :limit % limit. Ask a supervisor to authorize it.',
 
     'special_line_not_allowed' => 'You do not have permission to sell items outside the catalogue.',
+    'special_line_quota' => 'Temporary-item quota retrieved.',
     'special_line_limit_reached' => 'You already used the :limit off-catalogue items for today. Ask a supervisor to authorize it.',
     'special_line_notice_title' => ':employee sold an off-catalogue item',
     'special_line_notice_body' => '":description" for :amount. That is :used of :limit today.',

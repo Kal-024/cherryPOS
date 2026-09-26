@@ -74,7 +74,12 @@ watch(
 <template>
   <form class="grid gap-3 sm:grid-cols-2" @submit.prevent="emit('submit')">
     <UFormField :label="t('products.sku')" required>
-      <UInput v-model="draft.sku" autofocus class="w-full" />
+      <UInput
+        v-model="draft.sku"
+        v-only="'code'"
+        autofocus
+        class="w-full"
+      />
     </UFormField>
 
     <UFormField :label="t('products.name')" required>
@@ -104,6 +109,7 @@ watch(
     >
       <UInput
         v-model="draft.price"
+        v-only="'decimal'"
         type="text"
         inputmode="decimal"
         class="w-full"
@@ -113,6 +119,7 @@ watch(
     <UFormField :label="t('products.cost')" :help="t('products.costHint')">
       <UInput
         v-model="draft.cost"
+        v-only="'decimal'"
         type="text"
         inputmode="decimal"
         class="w-full"

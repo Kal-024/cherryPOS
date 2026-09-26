@@ -15,6 +15,8 @@ return [
     'merge_busy' => 'Table :code has an open tab: settle or move it before joining.',
     'tables_merged' => 'Tables joined.',
     'tables_split' => 'Tables separated.',
+    'note_saved' => 'Note saved.',
+    'note_needs_tab' => 'This table has no open tab: the note travels with the tab.',
     'product_without_modifiers' => ':name takes no modifiers.',
     'modifier_not_allowed' => 'That modifier does not belong to :name.',
     'modifier_required' => 'You must choose in «:group» (at least :min).',

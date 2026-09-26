@@ -298,11 +298,11 @@ async function confirmVoid() {
           </UFormField>
 
           <UFormField :label="t('expenses.amount')" required :help="t('expenses.amountHint')">
-            <UInput v-model="draft.amount" inputmode="decimal" class="w-full" />
+            <UInput v-model="draft.amount" v-only="'decimal'" class="w-full" />
           </UFormField>
 
           <UFormField :label="t('expenses.tax')" :help="t('expenses.taxHint')">
-            <UInput v-model="draft.tax_amount" inputmode="decimal" class="w-full" />
+            <UInput v-model="draft.tax_amount" v-only="'decimal'" class="w-full" />
           </UFormField>
 
           <UFormField :label="t('expenses.documentNumber')" :help="t('expenses.documentNumberHint')">

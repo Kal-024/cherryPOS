@@ -200,6 +200,52 @@ class SpecialLineTest extends TestCase
             ->assertJsonPath('errors.kind.0', __('sales.special_line_not_allowed'));
     }
 
+    public function test_la_caja_puede_preguntar_cuantas_le_quedan(): void
+    {
+        $sale = $this->openSale();
+        $this->addTemporary($sale, 'Escoba plástica')->assertCreated();
+        $this->addTemporary($sale, 'Trapeador')->assertCreated();
+
+        // Descubrir el límite al sexto intento, con el cliente delante, es lo que
+        // convierte un control en un obstáculo: la caja lo pregunta al abrir el
+        // diálogo.
+        $quota = $this->actingAsTerminal($this->token)
+            ->getJson('/api/special-lines/quota')->assertOk()->json('data');
+
+        $this->assertSame(2, $quota['used_today']);
+        $this->assertSame(5, $quota['limit']);
+        $this->assertSame(3, $quota['remaining']);
+        $this->assertTrue($quota['may_authorize_self']);
+    }
+
+    public function test_el_cupo_ilimitado_no_devuelve_un_numero(): void
+    {
+        config(['pos.temporary_item_daily_limit' => 0]);
+
+        $quota = $this->actingAsTerminal($this->token)
+            ->getJson('/api/special-lines/quota')->assertOk()->json('data');
+
+        // Nulo es **ilimitado**, que es la opción de D-03 para quien siempre
+        // tiene que poder hacerlo. Cero sería "prohibido", y prohibir se hace
+        // quitando el permiso.
+        $this->assertNull($quota['limit']);
+        $this->assertNull($quota['remaining']);
+    }
+
+    public function test_el_cupo_no_se_le_dice_a_quien_no_puede_vender_asi(): void
+    {
+        $cashier = $this->employee('CAJ99', '1111', 'cashier');
+        $token = $this->signedIn($cashier, '1111');
+
+        // Se responde igual —el diálogo se puede abrir— pero diciendo que sin
+        // autorización no alcanza: es la pantalla la que pide el PIN antes de
+        // dejar teclear el importe.
+        $quota = $this->actingAsTerminal($token)
+            ->getJson('/api/special-lines/quota')->assertOk()->json('data');
+
+        $this->assertFalse($quota['may_authorize_self']);
+    }
+
     public function test_el_limite_es_por_cajero_no_por_terminal(): void
     {
         $sale = $this->openSale();

@@ -10,6 +10,7 @@ use App\Models\Shift;
 use App\Models\Terminal;
 use App\Services\Audit\AuditLogger;
 use App\Services\Calc\Decimal;
+use App\Services\Catalog\AvailabilityService;
 use App\Services\Sales\ExchangeRateService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -32,6 +33,7 @@ class ShiftService
     public function __construct(
         private ExchangeRateService $rates,
         private AuditLogger $audit,
+        private AvailabilityService $availability,
     ) {}
 
     public function current(Terminal $terminal): ?Shift
@@ -71,6 +73,13 @@ class ShiftService
             ]);
 
             $this->storeCount($shift, 'opening', $opening);
+
+            // La lista 86 se vence al empezar el servicio (F1-B): lo que se acabó
+            // ayer vuelve a estar hoy sin que nadie tenga que acordarse. Solo
+            // cuando este es el primer turno abierto del local — con tres cajas,
+            // la segunda en abrir reviviría a media mañana lo que la cocina marcó
+            // temprano.
+            $this->availability->restoreForNewService($shift);
 
             $this->audit->record(
                 event: 'shift.opened',

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useAvailability } from '../composables/useAvailability'
 import { useCatalog, type CatalogProduct } from '../composables/useCatalog'
 import { amount } from '../utils/money'
 
@@ -25,6 +26,19 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const catalog = useCatalog()
+
+/**
+ * La lista 86 (F1-B): lo agotado se ve atenuado y no se puede elegir.
+ *
+ * El candado de verdad está en el servidor —la pantalla se puede saltar con el
+ * lector—, pero verlo acá evita el camino largo: teclear el plato, mandarlo,
+ * recibir el rechazo y explicárselo al cliente.
+ */
+const availability = useAvailability()
+const toast = useToast()
+
+onMounted(() => availability.start())
+onUnmounted(() => availability.stop())
 
 const term = ref('')
 /**
@@ -171,6 +185,15 @@ async function resolve(raw: string, qty: string) {
   // que faltaba ya está.
   const chosen = results.value[highlighted.value] ?? catalog.search(raw, 1)[0]
 
+  if (chosen && availability.isUnavailable(chosen.id)) {
+    // Se avisa en vez de seguir de largo: sin esto, Enter sobre un plato
+    // agotado no hace nada y parece que el teclado no responde.
+    toast.add({ title: t('sale.unavailable', { name: chosen.name }), color: 'warning' })
+    reset()
+
+    return
+  }
+
   if (chosen) {
     emit('pick', chosen, qty)
     reset()
@@ -188,6 +211,9 @@ async function resolve(raw: string, qty: string) {
 }
 
 function choose(product: CatalogProduct) {
+  // Agotado no se elige: ni con el ratón, ni con Enter sobre la fila marcada.
+  if (availability.isUnavailable(product.id)) return
+
   emit('pick', product, takeQty())
   reset()
 }
@@ -260,11 +286,29 @@ defineExpose({ focus, reset, isEmpty: () => term.value.length === 0 })
         :key="product.id"
         type="button"
         class="flex w-full items-center gap-3 px-3 py-2 text-left"
-        :class="index === highlighted ? 'bg-elevated' : ''"
+        :class="[
+          index === highlighted ? 'bg-elevated' : '',
+          availability.isUnavailable(product.id) ? 'opacity-50' : ''
+        ]"
         @click="choose(product)"
         @mouseenter="highlighted = index"
       >
-        <span class="grow truncate">{{ product.name }}</span>
+        <span class="grow truncate" :class="availability.isUnavailable(product.id) ? 'line-through' : ''">
+          {{ product.name }}
+        </span>
+
+        <!-- Rotulado, no solo gris: en una pantalla con reflejo el gris se lee
+             como "todavía cargando", no como "no hay". -->
+        <UBadge
+          v-if="availability.isUnavailable(product.id)"
+          color="warning"
+          variant="subtle"
+          size="sm"
+          class="shrink-0"
+        >
+          {{ t('sale.soldOut') }}
+        </UBadge>
+
         <span class="text-muted shrink-0 text-xs">{{ product.sku }}</span>
         <span class="pos-amount shrink-0 font-medium">{{ amount(product.price) }}</span>
       </button>

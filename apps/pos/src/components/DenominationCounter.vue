@@ -97,6 +97,7 @@ watch(
             <td class="py-1">
               <UInput
                 v-model.number="counts[key(denomination)]"
+                v-only="'digits'"
                 type="number"
                 min="0"
                 size="sm"

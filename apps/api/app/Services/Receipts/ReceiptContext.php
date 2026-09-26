@@ -123,6 +123,10 @@ class ReceiptContext
             'cashiers' => $summary['by_cashier'] ?? [],
             'sales' => $summary['sales'] ?? [],
             'denominations' => $summary['denominations'] ?? [],
+            // La propina se entrega aparte al cerrar: sin este renglón, el
+            // supervisor tiene que ir ticket por ticket para saber cuánto sacar
+            // del cajón (G-16).
+            'tips' => $summary['tips'] ?? [],
         ];
     }
 

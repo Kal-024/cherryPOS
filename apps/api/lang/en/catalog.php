@@ -17,6 +17,12 @@ return [
     'product_not_found' => 'Product not found.',
     'product_created' => 'Product created.',
     'product_updated' => 'Product updated.',
+    // The 86 list (F1-B): sold out today. Not a catalogue removal — the product
+    // stays and comes back on its own when the next service opens.
+    'availability_retrieved' => 'Availability retrieved.',
+    'marked_unavailable' => ':name is now marked as sold out.',
+    'marked_available' => ':name is available again.',
+    'product_unavailable' => ':name is sold out: the kitchen marked it, and it comes back when the next shift opens.',
     'product_deactivated' => 'Product deactivated.',
     'barcode_required' => 'Provide the code to read.',
     'barcode_resolved' => 'Code resolved.',

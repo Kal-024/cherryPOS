@@ -66,6 +66,15 @@ class ReceiptTemplateSeeder extends Seeder
                 'content' => ['blocks' => $this->saleBlocks(title: 'receipt.refund_receipt')],
             ],
             [
+                'code' => 'precuenta',
+                // No se llama "comprobante" a propósito: no lo es, y el papel lo
+                // dice en la primera línea.
+                'name' => 'Cuenta para el cliente (precuenta)',
+                'document_type' => 'pre_bill',
+                'paper' => 'thermal_80',
+                'content' => ['blocks' => $this->preBillBlocks()],
+            ],
+            [
                 'code' => 'corte-turno',
                 'name' => 'Corte de turno',
                 'document_type' => 'shift_cut',
@@ -139,18 +148,68 @@ class ReceiptTemplateSeeder extends Seeder
         ]);
     }
 
+    /**
+     * La precuenta del salón (F1-B).
+     *
+     * Dos diferencias con el ticket, y las dos importan: **no lleva bloque de
+     * pagos** —no se ha cobrado nada— y **avisa que no es comprobante de pago**.
+     * Sin ese aviso, un cliente se va con la precuenta creyendo que ya tiene su
+     * factura, y el ticket real queda sin entregar.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function preBillBlocks(): array
+    {
+        return array_merge($this->header(), [
+            ['type' => 'text', 'content' => '{{t:receipt.pre_bill}}', 'align' => 'center', 'bold' => true, 'hide_if_empty' => false],
+            ['type' => 'text', 'content' => '{{t:receipt.pre_bill_notice}}', 'align' => 'center', 'size' => 'sm', 'hide_if_empty' => false],
+            ['type' => 'field_list', 'fields' => [
+                // La mesa y el mesero: es lo que identifica el papel mientras la
+                // cuenta no tiene número, porque todavía no es un documento.
+                ['label' => 'receipt.table', 'value' => '{{sale.label}}'],
+                ['label' => 'receipt.date', 'value' => '{{sale.opened_at}}'],
+                ['label' => 'receipt.waiter', 'value' => '{{employee.full_name}}'],
+            ]],
+            ['type' => 'separator'],
+            ['type' => 'items', 'show_discount' => true],
+            ['type' => 'separator'],
+            ['type' => 'totals', 'show' => ['subtotal', 'exempt_total', 'discount_total', 'taxes', 'total']],
+            ['type' => 'separator'],
+            ['type' => 'text', 'content' => '{{t:receipt.pre_bill_footer}}', 'align' => 'center', 'size' => 'sm', 'hide_if_empty' => false],
+            ['type' => 'spacer', 'lines' => 3],
+        ]);
+    }
+
     /** @return array<int,array<string,mixed>> */
     private function shiftBlocks(): array
     {
         return array_merge($this->header(), [
+            ['type' => 'text', 'content' => '{{t:receipt.shift_cut}}', 'align' => 'center', 'bold' => true, 'hide_if_empty' => false],
             ['type' => 'field_list', 'fields' => [
                 ['label' => 'receipt.shift', 'value' => '{{shift.code}}'],
                 ['label' => 'receipt.opened_at', 'value' => '{{shift.opened_at}}'],
                 ['label' => 'receipt.closed_at', 'value' => '{{shift.closed_at}}'],
                 ['label' => 'receipt.opening_float', 'value' => '{{shift.opening_float}}'],
+                // La tasa va en el corte porque la caja la canta al cobrar en
+                // dólares: el papel es el respaldo de a cuánto se tomó (Q-06).
+                ['label' => 'receipt.exchange_rate', 'value' => '{{shift.exchange_rate}}'],
             ]],
             ['type' => 'separator'],
-            ['type' => 'spacer', 'lines' => 1],
+            ['type' => 'shift_sales'],
+            ['type' => 'separator'],
+            ['type' => 'shift_currencies'],
+            ['type' => 'separator'],
+            ['type' => 'shift_denominations'],
+            ['type' => 'shift_cashiers'],
+            ['type' => 'shift_tips'],
+            ['type' => 'separator'],
+            // El corte se entrega con el efectivo: las dos firmas son de quién
+            // contó y de quién recibió. Sin ellas el papel no prueba nada.
+            ['type' => 'spacer', 'lines' => 2],
+            ['type' => 'text', 'content' => '{{t:receipt.delivered_by}}', 'size' => 'sm', 'hide_if_empty' => false],
+            ['type' => 'spacer', 'lines' => 2],
+            ['type' => 'text', 'content' => '{{t:receipt.received_by}}', 'size' => 'sm', 'hide_if_empty' => false],
+            ['type' => 'spacer', 'lines' => 3],
         ]);
     }
 }

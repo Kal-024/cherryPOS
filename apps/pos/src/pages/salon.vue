@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { firstApiErrorMessage } from '../composables/httpClient'
+import { apiOpen, firstApiErrorMessage } from '../composables/httpClient'
 import { type DiningTable, useDining } from '../composables/useDining'
 import { useCart } from '../composables/useCart'
 import { useKitchen } from '../composables/useKitchen'
@@ -39,6 +39,17 @@ const opening = ref<DiningTable | null>(null)
 const guests = ref(2)
 const merging = ref<DiningTable | null>(null)
 const mergeWith = ref<string[]>([])
+
+/**
+ * La libreta del mesero (F1-B, §10).
+ *
+ * «Cumpleaños», «apurados, tienen función a las 8», «paga el de la camisa
+ * azul». No es la nota de la línea —esa va a la comanda y es de la cocina—: es
+ * del servicio, y se escribe en una tablet mientras el cliente habla. Un campo
+ * grande y dos botones: cualquier cosa más elaborada no se usa con prisa.
+ */
+const noting = ref<DiningTable | null>(null)
+const noteDraft = ref('')
 
 /**
  * Unir arrastrando una mesa sobre otra.
@@ -91,12 +102,15 @@ const visible = computed(() =>
  * exigiría `dining.manage`, que un mesero no tiene. Al separarlas, cada una
  * vuelve sola a su sitio.
  */
-const WIDTH = 112
-
-/** Hasta dónde llega el plano, más un margen para que la última mesa respire. */
+/**
+ * Hasta dónde llega el plano, más un margen para que la última mesa respire.
+ *
+ * Se mide con el tamaño **de cada mesa**: desde que cada una tiene el suyo, una
+ * constante única recortaba el lienzo justo donde estaba la mesa larga del fondo.
+ */
 const planSize = computed(() => {
-  const right = Math.max(0, ...placed.value.map((item) => item.x + WIDTH))
-  const bottom = Math.max(0, ...placed.value.map((item) => item.y + WIDTH))
+  const right = Math.max(0, ...placed.value.map((item) => item.x + item.table.width))
+  const bottom = Math.max(0, ...placed.value.map((item) => item.y + item.table.height))
 
   return {
     minWidth: `${Math.max(512, right + 40)}px`,
@@ -114,13 +128,86 @@ const placed = computed(() => {
 
     if (!main) return { table, x: table.pos_x, y: table.pos_y }
 
-    const position = (order.get(main.id) ?? 0) + 1
-    order.set(main.id, position)
+    // Se acumula el ancho de las que ya se acoplaron, no un múltiplo fijo: con
+    // mesas de tamaños distintos, un paso constante las superpone o deja huecos.
+    const offset = order.get(main.id) ?? 0
+    order.set(main.id, offset + table.width - 4)
 
     // Menos cuatro píxeles: los bordes se tocan en vez de dejar una ranura.
-    return { table, x: main.pos_x + position * (WIDTH - 4), y: main.pos_y }
+    return { table, x: main.pos_x + main.width - 4 + offset, y: main.pos_y }
   })
 })
+
+/** ¿Esta mesa manda sobre otras? Entonces se puede deshacer su grupo. */
+function hasMerged(table: DiningTable): boolean {
+  return dining.tables.value.some((other) => other.merged_into_id === table.id)
+}
+
+/**
+ * El menú de la mesa (clic derecho, o dedo apoyado en la tablet).
+ *
+ * Antes la única forma de separar era un botón al pie del salón, uno por grupo,
+ * que deshacía **el grupo entero**: con tres mesas empujadas contra una, devolver
+ * una sola a su sitio obligaba a separar las cuatro y rearmar a mano lo que nadie
+ * quiso deshacer. Las acciones viven donde está la mesa, que es donde el mesero
+ * las busca.
+ */
+function menuFor(table: DiningTable) {
+  const items = []
+
+  if (table.state !== 'merged' && (table.sale || canServe.value)) {
+    items.push({
+      label: table.sale ? t('dining.viewAccount') : t('dining.openTab'),
+      icon: table.sale ? 'i-lucide-receipt' : 'i-lucide-plus',
+      onSelect: () => { void tap(table) }
+    })
+  }
+
+  if (!canServe.value) return items
+
+  if (table.sale) {
+    // La precuenta se pide caminando el salón, no desde la caja: el cliente
+    // levanta la mano y el mesero ya está al lado de la mesa.
+    items.push({
+      label: t('dining.printBill'),
+      icon: 'i-lucide-printer',
+      onSelect: () => { void printBill(table) }
+    })
+
+    items.push({
+      label: t('dining.tableNote'),
+      icon: 'i-lucide-sticky-note',
+      onSelect: () => openNote(table)
+    })
+  }
+
+  // Soltar solo esta: el resto del grupo sigue junto.
+  if (table.merged_into_id !== null) {
+    items.push({
+      label: t('dining.splitThis'),
+      icon: 'i-lucide-unlink',
+      onSelect: () => { void split(table) }
+    })
+  }
+
+  if (hasMerged(table)) {
+    items.push({
+      label: t('dining.splitGroup'),
+      icon: 'i-lucide-scissors',
+      onSelect: () => { void split(table) }
+    })
+  }
+
+  if (table.state === 'free') {
+    items.push({
+      label: t('dining.mergeWith'),
+      icon: 'i-lucide-link',
+      onSelect: () => pickMain(table.id)
+    })
+  }
+
+  return items
+}
 
 /** Todas las libres del área: cualquiera puede ser la principal. */
 const freeTables = computed(() =>
@@ -154,6 +241,11 @@ function tone(table: DiningTable): string {
   if (table.state === 'merged') return 'border-dashed border-default text-muted'
   if (table.state !== 'occupied') return 'border-default hover:border-primary'
 
+  // Cuenta pedida gana sobre todo: son los únicos que están esperando **al
+  // mesero** y no a la cocina. Cada minuto ahí es una mesa que no se libera con
+  // gente en la puerta.
+  if (table.sale?.bill_requested_at) return 'border-info bg-info/10'
+
   // Comida lista gana sobre el tiempo sentado: una mesa de hace dos horas puede
   // esperar, un plato en el pase se enfría.
   if (table.sale?.kitchen?.state === 'ready') return 'border-success bg-success/10'
@@ -169,6 +261,27 @@ function tone(table: DiningTable): string {
 
 function kitchenLabel(state: 'cooking' | 'ready' | 'held'): string {
   return t(`kitchen.state${state.charAt(0).toUpperCase()}${state.slice(1)}`)
+}
+
+/**
+ * El estado del pedido, como distintivo en la esquina (F1-B, G-16).
+ *
+ * Antes era **un renglón más** dentro de la ficha, debajo del importe y los
+ * minutos: con "Listo para servir" el texto se salía del cuadro. Y un renglón de
+ * texto no es lo que el mesero lee de un vistazo desde la puerta de la cocina —
+ * lee **color y posición**, como el punto de los mensajes sin leer.
+ *
+ * Una mesa libre no muestra nada: el distintivo significa "algo pasa acá".
+ */
+function kitchenBadge(state: 'cooking' | 'ready' | 'held'): string {
+  return t(`kitchen.badge${state.charAt(0).toUpperCase()}${state.slice(1)}`)
+}
+
+function kitchenTone(state: 'cooking' | 'ready' | 'held'): 'success' | 'warning' | 'neutral' {
+  // Lo listo grita, lo que se cocina avisa, lo retenido solo recuerda.
+  if (state === 'ready') return 'success'
+
+  return state === 'cooking' ? 'warning' : 'neutral'
 }
 
 /**
@@ -313,6 +426,45 @@ async function confirmMerge() {
   }
 }
 
+/**
+ * Imprime la cuenta para el cliente (F1-B).
+ *
+ * Se abre en una pestaña, como el comprobante: lo que el mesero necesita es el
+ * visor del navegador con su botón de imprimir.
+ *
+ * **Imprimirla marca la mesa como "cuenta pedida"** — lo hace el servidor, al
+ * generar el papel. Un botón aparte para marcarlo sería un segundo paso que
+ * alguien olvida, y entonces el mapa mentiría con gente esperando mesa.
+ */
+async function printBill(table: DiningTable) {
+  if (!table.sale) return
+
+  try {
+    await apiOpen(`/sales/${table.sale.id}/pre-bill/pdf`)
+    await dining.refresh()
+  } catch (err) {
+    toast.add({ title: firstApiErrorMessage(err), color: 'error' })
+  }
+}
+
+function openNote(table: DiningTable) {
+  noting.value = table
+  noteDraft.value = table.sale?.notes ?? ''
+}
+
+async function saveNote() {
+  if (!noting.value) return
+
+  try {
+    // Vaciar el campo borra la nota: un segundo botón para eso sería un botón
+    // más que buscar con el cliente esperando.
+    await dining.setNote(noting.value.id, noteDraft.value)
+    noting.value = null
+  } catch (err) {
+    toast.add({ title: firstApiErrorMessage(err), color: 'error' })
+  }
+}
+
 async function split(table: DiningTable) {
   try {
     await dining.split(table.id)
@@ -402,51 +554,94 @@ async function split(table: DiningTable) {
            lejos quedaba recortada y **el mesero no podía tocarla**: el salón se
            dibuja según el local, y el local no cabe siempre en 32 rem. -->
       <div class="relative" :style="planSize">
-        <button
+        <!-- El menú no agrega nodo propio: la mesa sigue siendo el botón de
+             siempre, con su sitio en el plano. En la tablet se abre dejando el
+             dedo apoyado, que es el gesto que ya conocen. -->
+        <UContextMenu
           v-for="{ table, x, y } in placed"
           :key="table.id"
-          type="button"
-          :data-table-id="table.id"
-          class="absolute flex w-28 touch-none flex-col items-center justify-center gap-0.5 border-2 p-2 text-sm transition-transform duration-100 active:scale-95"
-          :class="[
-            tone(table),
-            table.shape === 'round' ? 'rounded-full h-28' : 'rounded-lg h-24',
-            dragged?.id === table.id ? 'opacity-60' : '',
-            dropTarget?.id === table.id ? 'border-primary ring-2 ring-primary' : ''
-          ]"
-          :style="{ left: `${x}px`, top: `${y}px` }"
-          @click="tap(table)"
-          @pointerdown="startTableDrag($event, table)"
-          @pointermove="onTableDrag"
-          @pointerup="endTableDrag"
-          @pointercancel="endTableDrag"
+          :items="menuFor(table)"
+          :disabled="menuFor(table).length === 0"
+          :press-open-delay="500"
         >
-          <span class="font-semibold">{{ table.name ?? table.code }}</span>
+          <!-- El tamaño es del plano y se configura en la trastienda: acá se
+               respeta. El mesero une y separa mesas, no mueve los muebles. -->
+          <button
+            type="button"
+            :data-table-id="table.id"
+            class="absolute flex touch-none flex-col items-center justify-center gap-0.5 border-2 p-2 text-sm transition-transform duration-100 active:scale-95"
+            :class="[
+              tone(table),
+              table.shape === 'round' ? 'rounded-full' : 'rounded-lg',
+              dragged?.id === table.id ? 'opacity-60' : '',
+              dropTarget?.id === table.id ? 'border-primary ring-2 ring-primary' : ''
+            ]"
+            :style="{
+              left: `${x}px`,
+              top: `${y}px`,
+              width: `${table.width}px`,
+              height: `${table.height}px`
+            }"
+            @click="tap(table)"
+            @pointerdown="startTableDrag($event, table)"
+            @pointermove="onTableDrag"
+            @pointerup="endTableDrag"
+            @pointercancel="endTableDrag"
+          >
+            <span class="font-semibold">{{ table.name ?? table.code }}</span>
 
-          <template v-if="table.sale">
-            <span class="pos-amount text-xs">{{ amount(table.sale.total) }}</span>
-            <span class="text-xs">
-              {{ t('dining.minutes', { count: dining.elapsedMinutes(table) ?? 0 }) }}
+            <!-- Una nota que nadie ve no sirve de nada: la ficha la marca y el
+                 mesero sabe que ahí hay algo escrito sin abrir nada. A la
+                 izquierda, porque la derecha es del estado del pedido. -->
+            <UIcon
+              v-if="table.sale?.notes"
+              name="i-lucide-sticky-note"
+              class="absolute top-1 left-1 size-4"
+            />
+
+            <!-- El estado del pedido, como el punto de los mensajes sin leer: se
+                 lee por color y posición, no leyendo (G-16). -->
+            <UBadge
+              v-if="table.sale?.bill_requested_at"
+              color="info"
+              variant="solid"
+              size="sm"
+              class="absolute -top-2 -right-2 shadow"
+              :title="t('dining.waitingToPay', { count: dining.waitingToPayMinutes(table) ?? 0 })"
+            >
+              {{ t('dining.billBadge', { count: dining.waitingToPayMinutes(table) ?? 0 }) }}
+            </UBadge>
+
+            <UBadge
+              v-else-if="table.sale?.kitchen"
+              :color="kitchenTone(table.sale.kitchen.state)"
+              variant="solid"
+              size="sm"
+              class="absolute -top-2 -right-2 shadow"
+              :title="kitchenLabel(table.sale.kitchen.state)"
+            >
+              {{ kitchenBadge(table.sale.kitchen.state) }}
+            </UBadge>
+
+            <template v-if="table.sale">
+              <span class="pos-amount text-xs">{{ amount(table.sale.total) }}</span>
+              <span class="text-xs">
+                {{ t('dining.minutes', { count: dining.elapsedMinutes(table) ?? 0 }) }}
+              </span>
+              <span v-if="table.sale.guests" class="text-muted text-xs">
+                {{ t('dining.guests', { count: table.sale.guests }) }}
+              </span>
+            </template>
+
+            <span v-else-if="table.state === 'merged'" class="text-xs">
+              {{ t('dining.merged') }}
             </span>
-            <span v-if="table.sale.guests" class="text-muted text-xs">
-              {{ t('dining.guests', { count: table.sale.guests }) }}
+
+            <span v-else class="text-muted text-xs">
+              {{ t('dining.seats', { count: table.seats }) }}
             </span>
-
-            <!-- El estado del pedido, en la mesa: el mesero mira el salón, no el
-                 pase de la cocina (G-16). -->
-            <span v-if="table.sale.kitchen" class="text-xs font-medium">
-              {{ kitchenLabel(table.sale.kitchen.state) }}
-            </span>
-          </template>
-
-          <span v-else-if="table.state === 'merged'" class="text-xs">
-            {{ t('dining.merged') }}
-          </span>
-
-          <span v-else class="text-muted text-xs">
-            {{ t('dining.seats', { count: table.seats }) }}
-          </span>
-        </button>
+          </button>
+        </UContextMenu>
       </div>
     </div>
 
@@ -465,16 +660,9 @@ async function split(table: DiningTable) {
 
       <span class="text-muted text-xs">{{ t('floorPlan.mergeDrop') }}</span>
 
-      <UButton
-        v-for="table in visible.filter((item) => item.merged_into_id === null && dining.tables.value.some((other) => other.merged_into_id === item.id))"
-        :key="`split-${table.id}`"
-        icon="i-lucide-unlink"
-        color="neutral"
-        variant="ghost"
-        size="sm"
-        :label="t('dining.splitOf', { code: table.name ?? table.code })"
-        @click="split(table)"
-      />
+      <!-- Separar ya no vive acá: era un botón por grupo que deshacía el grupo
+           entero, y la mesa que hay que soltar se señala en el plano. -->
+      <span class="text-muted text-xs">{{ t('dining.menuHint') }}</span>
     </div>
 
     <UModal
@@ -505,6 +693,46 @@ async function split(table: DiningTable) {
               :loading="dining.saving.value"
               :label="t('dining.openTab')"
               @click="confirmOpen"
+            />
+          </div>
+        </div>
+      </template>
+    </UModal>
+
+    <UModal
+      :open="noting !== null"
+      :title="t('dining.tableNote')"
+      @update:open="(value: boolean) => { if (!value) noting = null }"
+    >
+      <template #body>
+        <div class="flex flex-col gap-3">
+          <p class="text-muted text-sm">
+            {{ t('dining.noteHint') }}
+          </p>
+
+          <!-- Grande y sin rótulo: se escribe de pie, con una mano, mirando la
+               mesa. El teclado de la tablet ya tapa media pantalla. -->
+          <UTextarea
+            v-model="noteDraft"
+            :rows="5"
+            autofocus
+            :placeholder="t('dining.notePlaceholder')"
+            class="w-full text-base"
+          />
+
+          <div class="flex justify-end gap-2">
+            <UButton
+              size="lg"
+              color="neutral"
+              variant="ghost"
+              :label="t('common.cancel')"
+              @click="noting = null"
+            />
+            <UButton
+              size="lg"
+              :loading="dining.saving.value"
+              :label="t('dining.noteSave')"
+              @click="saveNote"
             />
           </div>
         </div>

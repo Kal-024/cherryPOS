@@ -96,12 +96,18 @@ async function submit() {
 
       <form class="flex flex-col gap-3" @submit.prevent="submit">
         <UFormField :label="t('operator.employeeCode')">
-          <UInput v-model="employeeCode" autofocus autocomplete="off" />
+          <UInput
+            v-model="employeeCode"
+            v-only="'code'"
+            autofocus
+            autocomplete="off"
+          />
         </UFormField>
 
         <UFormField :label="t('operator.pin')">
           <UInput
             v-model="pin"
+            v-only="'digits'"
             type="password"
             inputmode="numeric"
             autocomplete="off"

@@ -250,6 +250,7 @@ defineExpose({ focusAmount })
 
         <UInput
           v-model="tipInput"
+          v-only="'decimal'"
           type="number"
           step="0.01"
           min="0"
@@ -307,6 +308,7 @@ defineExpose({ focusAmount })
     <div class="flex gap-2">
       <UInput
         v-model="received"
+        v-only="'decimal'"
         type="number"
         step="0.01"
         min="0"

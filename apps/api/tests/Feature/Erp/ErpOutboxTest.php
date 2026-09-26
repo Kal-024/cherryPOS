@@ -3,6 +3,7 @@
 namespace Tests\Feature\Erp;
 
 use App\Models\ErpOutboxEntry;
+use App\Models\Product;
 use App\Models\ProductComponent;
 use App\Models\Sale;
 use App\Models\SupervisorNotification;
@@ -139,7 +140,7 @@ class ErpOutboxTest extends TestCase
         // negativas —así el motor la trata como el negativo exacto de su venta—
         // y el adaptador invierte solo la cantidad.
         [, $refundOf] = $this->originalTicket('P-002', '100.00');
-        $product = \App\Models\Product::where('sku', 'P-002')->firstOrFail();
+        $product = Product::where('sku', 'P-002')->firstOrFail();
 
         $sale = $this->actingAsTerminal($this->token)
             ->postJson('/api/sales', ['sale_type' => 'refund'] + $refundOf)

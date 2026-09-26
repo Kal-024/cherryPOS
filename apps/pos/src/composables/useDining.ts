@@ -40,6 +40,10 @@ export interface TableSale {
   opened_at: string
   waiter: string | null
   kitchen: TableKitchenState | null
+  /** La libreta del mesero sobre esta cuenta. Se va con ella al cobrar. */
+  notes: string | null
+  /** Cuándo se imprimió la precuenta. Nulo: todavía no la pidieron. */
+  bill_requested_at: string | null
 }
 
 export interface DiningTable {
@@ -51,6 +55,9 @@ export interface DiningTable {
   pos_x: number
   pos_y: number
   shape: 'square' | 'round' | 'rect'
+  /** Tamaño en el plano, en píxeles. Se configura en la trastienda. */
+  width: number
+  height: number
   merged_into_id: string | null
   /** Libre, ocupada o absorbida por otra mesa. Se deduce, no se guarda. */
   state: 'free' | 'occupied' | 'merged'
@@ -75,6 +82,21 @@ export function useDining() {
     if (!table.sale) return null
 
     return Math.max(0, Math.round((Date.now() - new Date(table.sale.opened_at).getTime()) / 60_000))
+  }
+
+  /**
+   * Cuánto lleva la mesa esperando pagar (F1-B).
+   *
+   * «Pidió la cuenta hace quince minutos» es un problema que hay que atender;
+   * «pidió la cuenta» no dice nada. Por eso se guarda la hora y no una bandera.
+   */
+  function waitingToPayMinutes(table: DiningTable): number | null {
+    if (!table.sale?.bill_requested_at) return null
+
+    return Math.max(
+      0,
+      Math.round((Date.now() - new Date(table.sale.bill_requested_at).getTime()) / 60_000)
+    )
   }
 
   async function refresh() {
@@ -138,11 +160,35 @@ export function useDining() {
     }
   }
 
-  async function split(mainId: string) {
+  /**
+   * Suelta mesas del grupo.
+   *
+   * **Qué se suelta depende de cuál mesa se manda.** Una unida se suelta sola y
+   * el resto del grupo sigue junto; la principal deshace el grupo entero. Antes
+   * solo existía lo segundo, y devolver una mesa a su sitio obligaba a rearmar
+   * a mano lo que nadie quiso deshacer.
+   */
+  async function split(tableId: string) {
     saving.value = true
 
     try {
-      await apiFetch(`/dining/tables/${mainId}/split`, { method: 'POST' })
+      await apiFetch(`/dining/tables/${tableId}/split`, { method: 'POST' })
+      await refresh()
+    } finally {
+      saving.value = false
+    }
+  }
+
+  /** Anota algo sobre la cuenta. Vacío la borra: no hace falta un segundo botón. */
+  async function setNote(tableId: string, notes: string) {
+    saving.value = true
+
+    try {
+      await apiFetch(`/dining/tables/${tableId}/note`, {
+        method: 'PUT',
+        body: JSON.stringify({ notes })
+      })
+
       await refresh()
     } finally {
       saving.value = false
@@ -214,6 +260,13 @@ export function useDining() {
     )
   }
 
+  /** Lo mismo al redimensionar: la esquina tiene que seguir al dedo. */
+  function resizeLocally(id: string, width: number, height: number) {
+    tables.value = tables.value.map(
+      (table) => (table.id === id ? { ...table, width, height } : table)
+    )
+  }
+
   return {
     areas,
     tables,
@@ -221,16 +274,19 @@ export function useDining() {
     loading,
     saving,
     elapsedMinutes,
+    waitingToPayMinutes,
     refresh,
     start,
     stop,
     openTable,
     merge,
     split,
+    setNote,
     createArea,
     createTable,
     updateTable,
     removeTable,
-    placeLocally
+    placeLocally,
+    resizeLocally
   }
 }

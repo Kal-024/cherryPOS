@@ -79,9 +79,32 @@ class CartService
      * @param  array<string,mixed>  $options
      * @return array<int,SaleLine>
      */
+    /**
+     * ¿Se puede vender hoy? (lista 86, F1-B).
+     *
+     * La pantalla ya atenúa lo agotado, pero la pantalla se puede saltar: llega
+     * un ticket del modo degradado, alguien teclea el código de barras, o dos
+     * meseros piden el último a la vez. La regla vive donde no se puede rodear.
+     *
+     * **Una devolución no se bloquea.** El cliente trae de vuelta lo que compró
+     * esta mañana, y que el plato se haya acabado después no tiene nada que ver
+     * con devolverle la plata.
+     */
+    private function assertAvailable(Sale $sale, Product $product): void
+    {
+        if ($sale->sale_type === 'refund' || ! $product->isUnavailable()) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'product_id' => __('catalog.product_unavailable', ['name' => $product->name]),
+        ]);
+    }
+
     public function addProduct(Sale $sale, Product $product, string $qty, array $options = []): array
     {
         $this->assertOpen($sale);
+        $this->assertAvailable($sale, $product);
 
         if ($product->is_composite && ! $product->sells_as_pack) {
             return $this->addComposite($sale, $product, $qty, $options);
@@ -144,6 +167,10 @@ class CartService
 
         $product = $resolved['barcode']->product;
         $productUom = $resolved['barcode']->productUom;
+
+        // También por el lector: el código de barras es justo el camino que
+        // esquiva la pantalla donde el producto sale atenuado.
+        $this->assertAvailable($sale, $product);
 
         // Código con precio embebido: la balanza ya decidió cuánto cobrar, así
         // que la línea es de una unidad a ese precio.

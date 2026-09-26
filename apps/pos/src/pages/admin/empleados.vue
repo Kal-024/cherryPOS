@@ -248,7 +248,12 @@ async function onPinSaved() {
         </UFormField>
 
         <UFormField :label="t('employees.code')" required :help="t('employees.codeHint')">
-          <UInput v-model="draft.code" :disabled="!canManage" class="w-full" />
+          <UInput
+            v-model="draft.code"
+            v-only="'code'"
+            :disabled="!canManage"
+            class="w-full"
+          />
         </UFormField>
 
         <UFormField :label="t('employees.nationalId')">
@@ -262,6 +267,7 @@ async function onPinSaved() {
         <UFormField :label="t('employees.discountLimit')" :help="t('employees.discountLimitHint')">
           <UInput
             v-model="draft.discount_limit_percent"
+            v-only="'decimal'"
             inputmode="decimal"
             :disabled="!canManage"
             class="w-full"
@@ -271,6 +277,7 @@ async function onPinSaved() {
         <UFormField :label="t('employees.tempItemLimit')" :help="t('employees.tempItemLimitHint')">
           <UInput
             v-model="draft.temp_item_daily_limit"
+            v-only="'digits'"
             inputmode="numeric"
             :disabled="!canManage"
             class="w-full"

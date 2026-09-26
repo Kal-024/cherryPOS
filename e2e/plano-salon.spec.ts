@@ -134,6 +134,44 @@ test.describe('Plano del salón', () => {
     expect(Math.abs((despues?.x ?? 0) - (antes?.x ?? 0))).toBeLessThan(4)
   })
 
+  test('2c · la mesa se estira desde su esquina, y el tamaño queda guardado', async () => {
+    await page.goto('/admin/salon')
+
+    const ficha = page.locator('[data-plan-table="M1"]')
+
+    // Tocarla la elige: el tirador solo aparece en la mesa elegida, porque uno
+    // por mesa en todo el plano sería un campo de puntos que se tocan sin querer.
+    await ficha.click()
+
+    const tirador = page.locator('[data-plan-resize="M1"]')
+
+    await expect(tirador).toBeVisible()
+
+    const antes = await ficha.boundingBox()
+    const asa = await tirador.boundingBox()
+
+    await page.mouse.move((asa?.x ?? 0) + 8, (asa?.y ?? 0) + 8)
+    await page.mouse.down()
+    await page.mouse.move((asa?.x ?? 0) + 40, (asa?.y ?? 0) + 30, { steps: 6 })
+    await page.mouse.move((asa?.x ?? 0) + 60, (asa?.y ?? 0) + 40, { steps: 6 })
+    await page.mouse.up()
+
+    const despues = await ficha.boundingBox()
+
+    expect(despues?.width).toBeGreaterThan(antes?.width ?? 0)
+
+    // Un editor que solo estira píxeles en pantalla se descubre al día
+    // siguiente, con el plano intacto y nadie sabiendo por qué.
+    const estirada = despues?.width ?? 0
+
+    await page.reload()
+    await ficha.click()
+
+    const recargada = await ficha.boundingBox()
+
+    expect(Math.abs((recargada?.width ?? 0) - estirada)).toBeLessThan(4)
+  })
+
   test('3 · la posición queda ajustada a la rejilla', async () => {
     await page.goto('/admin/salon')
 

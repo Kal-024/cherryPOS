@@ -85,6 +85,7 @@ async function submit() {
     <UFormField :label="t('employees.pin')" required>
       <UInput
         v-model="pin"
+        v-only="'digits'"
         type="password"
         inputmode="numeric"
         autocomplete="off"
@@ -100,6 +101,7 @@ async function submit() {
     >
       <UInput
         v-model="confirmation"
+        v-only="'digits'"
         type="password"
         inputmode="numeric"
         autocomplete="off"

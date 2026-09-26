@@ -34,6 +34,37 @@ class SaleLineController extends Controller
         private AuditLogger $audit,
     ) {}
 
+    /**
+     * Cuántas válvulas de escape le quedan hoy a este cajero (D-03).
+     *
+     * La caja lo necesita **antes** de abrir el diálogo: el límite es de cinco y
+     * descubrirlo al sexto intento, con el cliente delante, es lo que convierte
+     * un control en un obstáculo. Además hace visible que el supervisor va a
+     * recibir el aviso, que no es un castigo escondido sino parte del acuerdo.
+     */
+    public function quota(Request $request)
+    {
+        $employee = $request->attributes->get('operator_session')->employee;
+        $limit = $this->specialLines->limitFor($employee);
+        $used = $this->specialLines->usedToday($employee);
+
+        return response()->json([
+            'message' => __('sales.special_line_quota'),
+            'data' => [
+                'used_today' => $used,
+                // Nulo es **ilimitado**, que es la opción de D-03 para quien
+                // siempre tiene que poder hacerlo.
+                'limit' => $limit,
+                'remaining' => $limit === null ? null : max(0, $limit - $used),
+                'may_authorize_self' => $employee->hasPermission(
+                    SpecialLineGuard::PERMISSION,
+                    $request->attributes->get('branch_id')
+                ),
+            ],
+            'status' => 200,
+        ], 200);
+    }
+
     public function store(Request $request, string $saleId)
     {
         $sale = $this->findSale($request, $saleId);

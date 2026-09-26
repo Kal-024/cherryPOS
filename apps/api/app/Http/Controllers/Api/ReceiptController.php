@@ -57,6 +57,36 @@ class ReceiptController extends Controller
         ], 200);
     }
 
+    /**
+     * La precuenta, en papel (F1-B).
+     *
+     * **Imprimirla marca la mesa como "cuenta pedida".** No es un efecto
+     * secundario escondido: es el estado que el mapa necesita, y deducirlo del
+     * gesto que ya existe evita un segundo botón que alguien olvidaría — con el
+     * mapa mintiendo justo cuando hay gente esperando mesa.
+     *
+     * Se puede reimprimir —el cliente la pide, la mira, sigue pidiendo postre y
+     * la vuelve a pedir— y la marca **conserva la primera hora**: lo que el mapa
+     * muestra es cuánto lleva esperando pagar.
+     */
+    public function preBill(Request $request, string $saleId)
+    {
+        $sale = $this->find($request, $saleId);
+
+        if (! $sale) {
+            return response()->json(['message' => __('sales.not_found'), 'status' => 404], 404);
+        }
+
+        $rendered = $this->receipts->forPreBill($sale);
+
+        if ($sale->bill_requested_at === null) {
+            $sale->forceFill(['bill_requested_at' => now()])->save();
+        }
+
+        return $this->pdf->make($rendered['template'], $rendered['lines'], $rendered['context'])
+            ->stream('cuenta-'.($sale->label ?? $sale->id).'.pdf');
+    }
+
     public function pdf(Request $request, string $saleId)
     {
         $sale = $this->find($request, $saleId);

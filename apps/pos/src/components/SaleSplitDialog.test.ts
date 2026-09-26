@@ -36,6 +36,8 @@ const table = (id: string, code: string, state: DiningTable['state']): DiningTab
   code,
   name: code,
   seats: 4,
+  width: 140,
+  height: 120,
   pos_x: 0,
   pos_y: 0,
   shape: 'square',

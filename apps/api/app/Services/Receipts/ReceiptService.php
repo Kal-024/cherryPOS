@@ -39,6 +39,38 @@ class ReceiptService
     }
 
     /**
+     * La precuenta del salón (F1-B): lo consumido, todavía sin cobrar.
+     *
+     * **No es el comprobante.** El cliente pide ver cuánto va antes de pagar, y
+     * ese papel tiene que decir que no es un documento de pago — si no, alguien
+     * se va creyendo que ya tiene su factura y el ticket real queda sin
+     * entregar. Por eso es un tipo de documento aparte con su propia plantilla,
+     * sin bloque de pagos y con el aviso arriba.
+     *
+     * Solo sobre cuentas abiertas: una cobrada ya tiene su comprobante de
+     * verdad.
+     *
+     * @return array{template: ReceiptTemplate, context: array<string,mixed>, lines: array<int,array<string,mixed>>}
+     */
+    public function forPreBill(Sale $sale): array
+    {
+        if ($sale->closed_at !== null) {
+            throw ValidationException::withMessages([
+                'sale' => __('receipt.pre_bill_already_closed'),
+            ]);
+        }
+
+        $template = $this->templateFor('pre_bill', $sale->branch_id);
+        $context = $this->context->forSale($sale);
+
+        return [
+            'template' => $template,
+            'context' => $context,
+            'lines' => $this->renderer->render($template, $context),
+        ];
+    }
+
+    /**
      * @param  array<string,mixed>  $summary
      * @return array{template: ReceiptTemplate, context: array<string,mixed>, lines: array<int,array<string,mixed>>}
      */
@@ -155,6 +187,48 @@ class ReceiptService
                 ['method' => 'cash', 'currency' => 'USD', 'amount' => '5.46', 'amount_base' => '200.00', 'exchange_rate' => '36.624300', 'reference' => null],
             ],
             'change' => '107.52',
+            // El corte de turno se previsualiza con la misma plantilla que se
+            // imprime, así que necesita sus propios datos de ejemplo: sin ellos,
+            // cada marcador resolvía vacío y el editor mostraba el esquema sin un
+            // solo número — que es exactamente lo que se reportó del papel.
+            'shift' => [
+                'code' => 'T-2026-0912',
+                'opened_at' => '16/09/2026 08:00',
+                'closed_at' => '16/09/2026 20:14',
+                'opening_float' => '2000.00',
+                'exchange_rate' => '36.624300',
+            ],
+            'sales' => [
+                'count' => 37,
+                'total' => '48210.75',
+                'tax_total' => '6288.35',
+                'by_method' => ['cash' => '31210.75', 'card' => '12000.00', 'credit' => '5000.00'],
+            ],
+            // Con faltante a propósito: una vista previa que cuadra esconde justo
+            // el renglón que hay que poder leer de un vistazo.
+            'currencies' => [
+                ['currency_code' => 'NIO', 'expected' => '33210.75', 'counted' => '33150.00', 'difference' => '-60.75'],
+                ['currency_code' => 'USD', 'expected' => '150.00', 'counted' => '155.00', 'difference' => '5.00'],
+            ],
+            'cashiers' => [
+                ['employee_code' => 'CAJ01', 'employee_name' => 'María de los Ángeles Rodríguez', 'sales' => 24, 'total' => '31980.50'],
+                ['employee_code' => 'CAJ02', 'employee_name' => 'Josué Martínez', 'sales' => 13, 'total' => '16230.25'],
+            ],
+            'denominations' => [
+                ['currency_code' => 'NIO', 'denomination' => '1000.00', 'count' => 28, 'subtotal' => '28000.00'],
+                ['currency_code' => 'NIO', 'denomination' => '100.00', 'count' => 45, 'subtotal' => '4500.00'],
+                ['currency_code' => 'NIO', 'denomination' => '10.00', 'count' => 60, 'subtotal' => '600.00'],
+                ['currency_code' => 'NIO', 'denomination' => '0.50', 'count' => 100, 'subtotal' => '50.00'],
+                ['currency_code' => 'USD', 'denomination' => '20.00', 'count' => 7, 'subtotal' => '140.00'],
+                ['currency_code' => 'USD', 'denomination' => '5.00', 'count' => 3, 'subtotal' => '15.00'],
+            ],
+            'tips' => [
+                'total' => '1450.00',
+                'by_employee' => [
+                    ['employee_id' => null, 'employee_name' => 'Josué Martínez', 'total' => '950.00'],
+                    ['employee_id' => null, 'employee_name' => null, 'total' => '500.00'],
+                ],
+            ],
         ];
     }
 }

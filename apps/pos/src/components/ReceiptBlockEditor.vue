@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { TOTAL_ROWS, type TemplateBlock } from '../composables/useReceiptTemplates'
+import { SHIFT_BLOCKS, TOTAL_ROWS, type TemplateBlock } from '../composables/useReceiptTemplates'
 
 /**
  * Un bloque de la plantilla (D-11).
@@ -39,6 +39,9 @@ const sizeOptions = computed(() => [
 ])
 
 const totalRows = TOTAL_ROWS
+
+/** Los del corte solo ofrecen su rótulo: las listas las recorre el servidor. */
+const isShiftBlock = computed(() => SHIFT_BLOCKS.includes(block.value.type))
 
 function toggleRow(row: string, checked: boolean) {
   const current = new Set(block.value.show ?? [])
@@ -215,6 +218,19 @@ function removeField(index: number) {
         :label="t('receipts.addField')"
         @click="addField"
       />
+    </template>
+
+    <template v-else-if="isShiftBlock">
+      <!-- Un corte sin rótulos es una columna de números sin dueño: quien lo
+           archiva no sabría si el importe es lo esperado o lo vendido. -->
+      <USwitch
+        :model-value="block.show_title ?? true"
+        :label="t('receipts.showTitle')"
+        @update:model-value="block = { ...block, show_title: $event }"
+      />
+      <p class="text-muted text-xs">
+        {{ t(`receipts.blockHint.${block.type}`) }}
+      </p>
     </template>
 
     <p v-else class="text-muted text-xs">

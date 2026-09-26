@@ -40,6 +40,17 @@ const byBarcode = vi.fn<(code: string) => CatalogProduct | null>()
 const cached = ref(2)
 const whenReady = vi.fn(async () => undefined)
 
+/** La lista 86: lo que se acabó hoy. Vacía salvo donde la prueba la llene. */
+const unavailableIds = ref<string[]>([])
+
+vi.mock('../composables/useAvailability', () => ({
+  useAvailability: () => ({
+    isUnavailable: (id: string) => unavailableIds.value.includes(id),
+    start: () => undefined,
+    stop: () => undefined
+  })
+}))
+
 vi.mock('../composables/useCatalog', () => ({
   useCatalog: () => ({
     search: (term: string, limit?: number) => results(term, limit),
@@ -59,6 +70,46 @@ describe('SaleSearch', () => {
     cached.value = 2
     whenReady.mockReset()
     whenReady.mockResolvedValue(undefined)
+    unavailableIds.value = []
+  })
+
+  describe('la lista 86', () => {
+    it('marca lo agotado en vez de solo atenuarlo', async () => {
+      // En una pantalla con reflejo el gris se lee como "todavía cargando", no
+      // como "no hay".
+      unavailableIds.value = ['p1']
+      results.mockReturnValue([cheese])
+
+      const wrapper = mount(SaleSearch)
+      await wrapper.get('input').setValue('Queso')
+
+      expect(wrapper.text()).toContain('Agotado')
+    })
+
+    it('no lo agrega al tocarlo', async () => {
+      unavailableIds.value = ['p1']
+      results.mockReturnValue([cheese])
+
+      const wrapper = mount(SaleSearch)
+      await wrapper.get('input').setValue('Queso')
+      await wrapper.get('button').trigger('click')
+
+      // El candado de verdad está en el servidor —el lector esquiva esta
+      // pantalla—, pero pedirlo acá para recibir el rechazo después sería
+      // hacerle perder el viaje al mesero con el cliente esperando.
+      expect(wrapper.emitted('pick')).toBeUndefined()
+    })
+
+    it('lo disponible sigue entrando', async () => {
+      unavailableIds.value = ['p1']
+      results.mockReturnValue([cola])
+
+      const wrapper = mount(SaleSearch)
+      await wrapper.get('input').setValue('Gaseosa')
+      await wrapper.get('button').trigger('click')
+
+      expect(wrapper.emitted('pick')).toHaveLength(1)
+    })
   })
 
   describe('mientras el catálogo baja', () => {

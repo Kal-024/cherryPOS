@@ -18,6 +18,7 @@ import SaleTotals from '../components/SaleTotals.vue'
 import PaymentPanel, { type ClosedSale } from '../components/PaymentPanel.vue'
 import CustomerPicker from '../components/CustomerPicker.vue'
 import RefundDialog from '../components/RefundDialog.vue'
+import SpecialLineDialog from '../components/SpecialLineDialog.vue'
 import { type Customer, useCustomers } from '../composables/useCustomers'
 import ShiftPanel from '../components/ShiftPanel.vue'
 import ModifierPicker from '../components/ModifierPicker.vue'
@@ -92,6 +93,16 @@ const pickingCustomer = ref(false)
  * es lo que hace que una devolución cuadre igual que un ticket.
  */
 const refunding = ref(false)
+
+/**
+ * Las válvulas de escape del catálogo (D-03).
+ *
+ * El control existía entero en el servidor —cinco por día, aviso al supervisor,
+ * PIN sobre el tope— y **no tenía botón**: el cajero que se topaba con algo sin
+ * cargar no tenía forma de venderlo, así que lo cobraba sobre otro producto y el
+ * inventario quedaba mintiendo.
+ */
+const addingSpecial = ref(false)
 const isRefund = computed(() => cart.sale.value?.sale_type === 'refund')
 const notice = ref('')
 
@@ -269,13 +280,17 @@ function onKey(event: KeyboardEvent) {
   } else if (event.key === 'F4') {
     event.preventDefault()
     showSuspended.value = !showSuspended.value
+  } else if (event.key === 'F8') {
+    // Vender algo que no está cargado, sin levantar la mano del teclado.
+    event.preventDefault()
+    addingSpecial.value = true
   } else if (event.key === 'F7' && cart.isOpen.value) {
     // A quién se le vende: hace falta antes de cobrar a crédito, y sin teclado
     // también se llega tocando el renglón del cliente.
     event.preventDefault()
     pickingCustomer.value = true
   } else if (event.key === 'Escape') {
-    if (charging.value || showSuspended.value || showHelp.value || askingLabel.value || pickingCustomer.value) {
+    if (charging.value || showSuspended.value || showHelp.value || askingLabel.value || pickingCustomer.value || addingSpecial.value) {
       event.preventDefault()
       dismiss()
     }
@@ -288,6 +303,7 @@ function dismiss() {
   showHelp.value = false
   askingLabel.value = false
   pickingCustomer.value = false
+  addingSpecial.value = false
   focusSearch()
 }
 
@@ -509,6 +525,28 @@ function onClosed(closed: ClosedSale | null) {
  * bandeja de salida de este equipo y el servidor no la conoce. Pedirle el
  * comprobante devolvería un 404 sin explicar por qué.
  */
+/**
+ * La cuenta para el cliente, antes de cobrar (F1-B).
+ *
+ * **Solo en perfil restaurante.** En un minisúper, una farmacia o una ferretería
+ * nadie pide ver lo consumido antes de pagar: el cliente está en la caja y el
+ * ticket sale al cobrar. Ofrecerlo ahí sería un botón que nunca se toca y que
+ * alguien va a tocar por error.
+ *
+ * Imprimirla marca la mesa como «cuenta pedida» — lo hace el servidor al generar
+ * el papel, no un segundo botón que alguien olvidaría.
+ */
+async function openPreBill() {
+  if (!cart.sale.value) return
+
+  try {
+    await apiOpen(`/sales/${cart.sale.value.id}/pre-bill/pdf`)
+    focusSearch()
+  } catch (err) {
+    notice.value = firstApiErrorMessage(err)
+  }
+}
+
 async function openReceipt() {
   if (!lastClosed.value || lastClosed.value.offline) return
 
@@ -547,28 +585,34 @@ function onShiftClosed(cut: ShiftSummary) {
       Modo degradado: el cajero tiene que saberlo, y tiene que saber cuánto le
       queda. Un aviso que no dice cuántos números quedan no sirve para decidir
       si seguir vendiendo o llamar a alguien.
-    -->
-    <UAlert
-      v-if="cart.degraded.value"
-      color="warning"
-      variant="subtle"
-      icon="i-lucide-wifi-off"
-      :title="t('offline.title')"
-      :description="t('offline.remaining', {
-        numbers: offline.remainingNumbers.value,
-        pending: offline.pending.value.length
-      })"
-      class="lg:col-span-2"
-    />
 
-    <UAlert
+      **En un renglón, no en un bloque.** Como `UAlert` con título y descripción
+      ocupaba dos líneas más su relleno, y este aviso vive encima del carrito:
+      cada renglón que se lleva es una línea de venta menos a la vista, justo
+      cuando el cajero más necesita ver lo que va cobrando. Los contadores se
+      quedan —son la razón del aviso—, pero al lado y no debajo.
+    -->
+    <div
+      v-if="cart.degraded.value"
+      class="border-warning bg-warning/10 flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm lg:col-span-2"
+    >
+      <UIcon name="i-lucide-wifi-off" class="size-4 shrink-0" />
+      <span class="font-medium">{{ t('offline.title') }}</span>
+      <span class="text-muted truncate">
+        {{ t('offline.remaining', {
+          numbers: offline.remainingNumbers.value,
+          pending: offline.pending.value.length
+        }) }}
+      </span>
+    </div>
+
+    <div
       v-else-if="offline.pending.value.length > 0"
-      color="info"
-      variant="subtle"
-      icon="i-lucide-upload-cloud"
-      :title="t('offline.sending', { count: offline.pending.value.length })"
-      class="lg:col-span-2"
-    />
+      class="border-info bg-info/10 flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm lg:col-span-2"
+    >
+      <UIcon name="i-lucide-upload-cloud" class="size-4 shrink-0" />
+      <span class="font-medium">{{ t('offline.sending', { count: offline.pending.value.length }) }}</span>
+    </div>
     <!-- Columna de trabajo: búsqueda arriba, líneas debajo. -->
     <section class="flex min-h-0 flex-col gap-3">
       <SaleSearch
@@ -713,6 +757,31 @@ function onShiftClosed(cut: ShiftSummary) {
             </UBadge>
           </UButton>
 
+          <!-- La cuenta para que el cliente vea lo consumido antes de pagar.
+               Solo en el salón: en un mostrador nadie la pide. -->
+          <UButton
+            v-if="isRestaurant && cart.lines.value.length > 0"
+            color="neutral"
+            variant="subtle"
+            icon="i-lucide-printer"
+            @click="openPreBill"
+          >
+            {{ t('dining.printBill') }}
+          </UButton>
+
+          <!-- Vender algo que no está en el catálogo. Lleva límite diario y
+               avisa al supervisor, y por eso el botón está a la vista: lo que se
+               esconde se reemplaza por cobrarlo sobre otro producto. -->
+          <UButton
+            color="neutral"
+            variant="subtle"
+            icon="i-lucide-square-pen"
+            @click="addingSpecial = true"
+          >
+            {{ t('special.action') }}
+            <UKbd value="F8" />
+          </UButton>
+
           <!-- Devolver empieza por buscar el ticket original, así que no se
                ofrece con una venta a medias: serían dos documentos en curso. -->
           <UButton
@@ -773,6 +842,8 @@ function onShiftClosed(cut: ShiftSummary) {
   />
 
   <RefundDialog v-model:open="refunding" @started="onRefundStarted" />
+
+  <SpecialLineDialog v-model:open="addingSpecial" @added="focusSearch" />
 
   <!-- Suspender pide una referencia: "Mesa 4" o el nombre del cliente es lo que
        permite reconocerla después (D-01). -->
@@ -857,6 +928,7 @@ function onShiftClosed(cut: ShiftSummary) {
         </div>
         <div class="flex items-center gap-3">
           <UKbd value="F6" /><dd>{{ t('shortcuts.qtyEdit') }}</dd>
+          <UKbd value="F8" /><dd>{{ t('shortcuts.special') }}</dd>
         </div>
         <div class="flex items-center gap-3">
           <UKbd value="+" /><UKbd value="−" /><dd>{{ t('shortcuts.qtyBump') }}</dd>
