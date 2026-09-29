@@ -219,7 +219,7 @@ async function remove() {
           required
           :help="t('roles.codeHint')"
         >
-          <UInput v-model="draftCode" class="w-40" />
+          <UInput v-model="draftCode" v-only="'slug'" class="w-40" />
         </UFormField>
 
         <UFormField :label="t('roles.name')" :help="!nameEditable && !creating ? t('roles.nameFixed') : undefined">

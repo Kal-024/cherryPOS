@@ -9,25 +9,37 @@ import type { Directive } from 'vue'
  * letras. Cuarenta validaciones sueltas se desincronizan; esta es la misma en
  * todas.
  *
- * Cuatro reglas, elegidas por lo que el dato **es**:
+ * Siete reglas, elegidas por lo que el dato **es**:
  *
  *  - `digits` — PIN, cantidades enteras, sillas, conteo de billetes.
  *  - `decimal` — precios, importes, tasas, límites, topes de descuento. Entiende
  *    la coma según el contexto: ver `separators()`, que es donde vive la
  *    diferencia entre "mil doscientos treinta y cuatro con cincuenta" y
  *    "cuarenta y cinco con cincuenta".
- *  - `code` — SKU y códigos de sucursal, terminal, empleado, mesa o zona:
- *    alfanumérico sin espacios, y se escribe en mayúsculas mientras se teclea
- *    porque los códigos se comparan y "caja-01" no es "CAJA-01" a la vista.
+ *  - `code` — SKU y códigos de sucursal, terminal, empleado, mesa o zona, más
+ *    la **cédula y el RUC**, que son de la misma familia: alfanumérico sin
+ *    espacios, y se escribe en mayúsculas mientras se teclea porque los códigos
+ *    se comparan y "caja-01" no es "CAJA-01" a la vista. La cédula nicaragüense
+ *    `001-010180-0001A` entra tal cual, y su letra final queda en mayúscula sin
+ *    que nadie tenga que acordarse.
  *  - `integer` — como `digits` pero admite el signo.
  *  - `signed` — decimal con signo: el ajuste de inventario que **resta** y la
  *    línea de una devolución, que viaja en negativo. Quitarle el menos a un
  *    ajuste lo convertiría en una entrada de mercadería que nunca llegó.
+ *  - `phone` — teléfono y WhatsApp. **No es `digits`**: el número se escribe
+ *    `8888-8888` y el de WhatsApp viaja con prefijo, `+505 8888 8888`. Filtrar
+ *    a dígitos pelados obligaría al supervisor a pelear con el campo mientras
+ *    copia una agenda; lo que no entra son las letras.
+ *  - `slug` — el código de un rol, que es un identificador del sistema y no de
+ *    mostrador: `cashier`, `supervisor`. Va en **minúsculas**, al revés que
+ *    `code`, porque así están sembrados los roles del instalador y un
+ *    `CASHIER` escrito a mano sería un rol distinto que nadie nota hasta que
+ *    un permiso no aplica.
  *
  * Los campos libres —descripciones, notas, referencias de pago, nombres,
- * direcciones— **no se tocan**: ahí la validación estorbaría más de lo que
- * protege. Un nombre lleva tildes, una referencia lleva guiones y un apellido
- * puede llevar un número.
+ * direcciones, números de documento de un gasto— **no se tocan**: ahí la
+ * validación estorbaría más de lo que protege. Un nombre lleva tildes, una
+ * referencia lleva guiones y un apellido puede llevar un número.
  *
  * **Filtra también lo que se pega.** Es el camino por el que entra la mitad de la
  * basura: un importe copiado de una planilla trae el símbolo de moneda y los
@@ -37,12 +49,24 @@ import type { Directive } from 'vue'
  * evita el viaje de ida y vuelta, no la validación.
  */
 
-export type OnlyRule = 'digits' | 'integer' | 'decimal' | 'signed' | 'code'
+export type OnlyRule = 'digits' | 'integer' | 'decimal' | 'signed' | 'code' | 'phone' | 'slug'
 
 /** Deja lo que la regla admite y descarta el resto, en el orden teclado. */
 function clean(value: string, rule: OnlyRule): string {
   if (rule === 'code') {
     return value.replace(/[^A-Za-z0-9._-]/g, '').toUpperCase()
+  }
+
+  if (rule === 'slug') {
+    return value.replace(/[^A-Za-z0-9._-]/g, '').toLowerCase()
+  }
+
+  if (rule === 'phone') {
+    // El `+` solo vale como prefijo de país: en el medio no significa nada y
+    // entra pegando de una agenda mal copiada.
+    const prefix = value.trimStart().startsWith('+') ? '+' : ''
+
+    return prefix + value.replace(/[^\d ()-]/g, '')
   }
 
   if (rule === 'digits') {
@@ -56,7 +80,11 @@ function clean(value: string, rule: OnlyRule): string {
   }
 
   const sign = rule === 'signed' && value.startsWith('-') ? '-' : ''
-  const [whole, ...rest] = separators(value).replace(/[^\d.]/g, '').split('.')
+  // La basura se va **antes** de decidir qué significa la coma: con el símbolo
+  // de moneda o el `%` todavía pegados, "12,5 %" no termina en dígito y la coma
+  // pasaba por separador de miles — ciento veinticinco por ciento de descuento.
+  const numeric = value.replace(/[^\d.,]/g, '')
+  const [whole, ...rest] = separators(numeric).replace(/[^\d.]/g, '').split('.')
   const digits = rest.length > 0 ? `${whole}.${rest.join('')}` : (whole ?? '')
 
   return sign + digits
@@ -104,7 +132,9 @@ export const vOnly: Directive<HTMLElement, OnlyRule | undefined> = {
     // alfabético es hacer trabajar al cajero por gusto.
     if (rule === 'digits' || rule === 'integer') input.inputMode = 'numeric'
     if (rule === 'decimal' || rule === 'signed') input.inputMode = 'decimal'
+    if (rule === 'phone') input.inputMode = 'tel'
     if (rule === 'code') input.autocapitalize = 'characters'
+    if (rule === 'slug') input.autocapitalize = 'none'
 
     /**
      * Se corrige en `input` y no en `keydown`.

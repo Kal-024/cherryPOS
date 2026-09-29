@@ -152,6 +152,7 @@ async function showStatement() {
         <UFormField :label="t('credit.cutOffDay')" :help="t('credit.cutOffDayHint')">
           <UInput
             v-model.number="cutOffDraft"
+            v-only="'digits'"
             type="number"
             min="1"
             max="31"
@@ -262,7 +263,7 @@ async function showStatement() {
           </UFormField>
 
           <UFormField :label="t('credit.authorizedNationalId')" required :help="t('credit.authorizedNationalIdHint')">
-            <UInput v-model="authorizedNationalId" class="w-36" />
+            <UInput v-model="authorizedNationalId" v-only="'code'" class="w-36" />
           </UFormField>
 
           <UFormField :label="t('credit.authorizedRelationship')">

@@ -211,7 +211,7 @@ async function toggleDenomination(id: string, active: boolean) {
         >
           <UInput
             v-model="draft['cash.rounding_increment']"
-            inputmode="decimal"
+            v-only="'decimal'"
             :disabled="!canEdit || !roundingOn"
             class="w-32"
           />
@@ -242,6 +242,7 @@ async function toggleDenomination(id: string, active: boolean) {
       <UFormField :label="t('settings.offlineMaxHours')" :help="t('settings.offlineMaxHoursHint')">
         <UInput
           v-model.number="draft['pos.offline_max_hours']"
+          v-only="'digits'"
           type="number"
           min="1"
           max="720"
@@ -271,6 +272,7 @@ async function toggleDenomination(id: string, active: boolean) {
       >
         <UInput
           v-model="draft['tip.suggested_percent']"
+          v-only="'decimal'"
           type="number"
           min="0"
           max="100"
@@ -315,7 +317,7 @@ async function toggleDenomination(id: string, active: boolean) {
         >
           <UInput
             v-model="rateDraft"
-            inputmode="decimal"
+            v-only="'decimal'"
             :disabled="!canSetRate"
             class="w-40"
           />
@@ -377,7 +379,7 @@ async function toggleDenomination(id: string, active: boolean) {
         </UFormField>
 
         <UFormField :label="t('settings.value')">
-          <UInput v-model="newValue" inputmode="decimal" class="w-28" />
+          <UInput v-model="newValue" v-only="'decimal'" class="w-28" />
         </UFormField>
 
         <UFormField :label="t('settings.kind')">

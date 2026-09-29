@@ -210,6 +210,7 @@ async function confirm() {
                 <td class="p-1 text-right">
                   <UInput
                     v-model="refund.chosen.value[line.id]"
+                    v-only="'decimal'"
                     type="number"
                     size="sm"
                     :min="0"

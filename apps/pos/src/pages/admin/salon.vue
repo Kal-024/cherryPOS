@@ -338,23 +338,32 @@ async function removeSelected() {
       <!--
         Perderse en el lienzo es fácil; volver tiene que serlo más.
 
-        Los tres miden lo mismo **a la fuerza**: el del medio lleva texto y los
-        de los lados ícono, y con la altura librada al contenido el porcentaje
-        quedaba montado más abajo que sus vecinos. Ancho fijo y centrado propio
-        para que el número pueda ir de "70%" a "150%" sin mover a los otros dos.
+        El contenedor es `UFieldGroup`, no `UButtonGroup`: **ese componente no
+        existe en Nuxt UI 4**. Vue no lo resolvía y lo dejaba como etiqueta
+        desconocida, que es un elemento **en línea**; los tres botones quedaban
+        alineados por la línea base del texto y el "100%" —el único con texto—
+        se montaba más abajo que sus dos vecinos de ícono. El grupo real es
+        `inline-flex` y estira a sus hijos: los tres miden lo mismo sin pedirlo.
+
+        Alto fijo `h-8` de todos modos, porque la altura de un botón de ícono
+        sale del ícono y la del otro sale de la línea de texto: dejarla librada
+        al contenido es volver a depender de que ambos midan igual. Y ancho fijo
+        en el del medio para que el número pueda ir de "70%" a "150%" sin
+        empujar a los otros dos.
       -->
-      <UButtonGroup size="sm" class="items-center">
+      <UFieldGroup size="sm">
         <UButton
           icon="i-lucide-zoom-out"
           color="neutral"
           variant="subtle"
+          class="h-8 w-8 justify-center"
           :aria-label="t('floorPlan.zoomOut')"
           @click="canvas.zoomBy(-0.1)"
         />
         <UButton
           color="neutral"
           variant="subtle"
-          class="w-16 justify-center tabular-nums"
+          class="h-8 w-16 justify-center tabular-nums"
           :title="t('floorPlan.zoomReset')"
           :label="`${Math.round(canvas.zoom.value * 100)}%`"
           @click="canvas.reset()"
@@ -363,10 +372,11 @@ async function removeSelected() {
           icon="i-lucide-zoom-in"
           color="neutral"
           variant="subtle"
+          class="h-8 w-8 justify-center"
           :aria-label="t('floorPlan.zoomIn')"
           @click="canvas.zoomBy(0.1)"
         />
-      </UButtonGroup>
+      </UFieldGroup>
     </div>
 
     <!-- Altura propia: el área de la trastienda hace su propio desplazamiento y

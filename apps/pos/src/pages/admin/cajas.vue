@@ -307,11 +307,11 @@ async function printCut(shift: ClosedShift) {
           </UFormField>
 
           <UFormField :label="t('supervisor.code')">
-            <UInput v-model="supervisorCode" />
+            <UInput v-model="supervisorCode" v-only="'code'" />
           </UFormField>
 
           <UFormField :label="t('supervisor.pin')" :hint="t('supervisor.pinHint')">
-            <UInput v-model="supervisorPin" type="password" />
+            <UInput v-model="supervisorPin" v-only="'digits'" type="password" />
           </UFormField>
         </div>
       </template>

@@ -129,6 +129,7 @@ watch(
     <UFormField :label="t('products.minStock')" :class="{ 'opacity-50': !draft.tracks_stock }">
       <UInput
         v-model="draft.min_stock"
+        v-only="'decimal'"
         type="text"
         inputmode="decimal"
         :disabled="!draft.tracks_stock"

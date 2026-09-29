@@ -257,11 +257,21 @@ async function onPinSaved() {
         </UFormField>
 
         <UFormField :label="t('employees.nationalId')">
-          <UInput v-model="draft.national_id" :disabled="!canManage" class="w-full" />
+          <UInput
+            v-model="draft.national_id"
+            v-only="'code'"
+            :disabled="!canManage"
+            class="w-full"
+          />
         </UFormField>
 
         <UFormField :label="t('employees.phone')">
-          <UInput v-model="draft.phone" :disabled="!canManage" class="w-full" />
+          <UInput
+            v-model="draft.phone"
+            v-only="'phone'"
+            :disabled="!canManage"
+            class="w-full"
+          />
         </UFormField>
 
         <UFormField :label="t('employees.discountLimit')" :help="t('employees.discountLimitHint')">

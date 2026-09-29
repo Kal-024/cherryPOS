@@ -1,6 +1,7 @@
 import { config } from '@vue/test-utils'
 import { vi } from 'vitest'
 import { i18n } from '../i18n'
+import { vOnly } from '../directives/only'
 
 /**
  * Montaje de componentes sin Nuxt UI.
@@ -27,6 +28,17 @@ const passthrough = (tag: string) => ({
 vi.stubGlobal('useToast', () => ({ add: vi.fn(), remove: vi.fn(), clear: vi.fn() }))
 
 config.global.plugins = [i18n]
+
+/**
+ * `v-only` sí es real en las pruebas.
+ *
+ * La directiva la registra `main.ts`, que acá no corre; sin ella Vue avisa que
+ * no la encuentra y sigue. El problema es que entonces las pruebas de una
+ * pantalla ven llegar al modelo lo que nadie escribiría —letras en un importe—
+ * y el filtro que sí corre en producción queda sin verificar justo donde se
+ * usa.
+ */
+config.global.directives = { only: vOnly }
 
 config.global.stubs = {
   UInput: {

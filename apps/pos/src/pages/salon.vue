@@ -675,6 +675,7 @@ async function split(table: DiningTable) {
           <UFormField :label="t('dining.guestsLabel')" :help="t('dining.guestsHint')">
             <UInput
               v-model.number="guests"
+              v-only="'digits'"
               type="number"
               min="1"
               max="99"

@@ -125,6 +125,7 @@ function removeField(index: number) {
       <UFormField :label="t('receipts.lines')" :help="t('receipts.linesHint')">
         <UInput
           v-model.number="block.lines"
+          v-only="'digits'"
           type="number"
           min="1"
           max="10"

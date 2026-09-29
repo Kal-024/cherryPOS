@@ -48,19 +48,19 @@ const needsNationalId = computed(() => draft.value.kind === 'account')
       :required="needsNationalId"
       :help="needsNationalId ? t('customers.nationalIdHint') : undefined"
     >
-      <UInput v-model="draft.national_id" class="w-full" />
+      <UInput v-model="draft.national_id" v-only="'code'" class="w-full" />
     </UFormField>
 
     <UFormField :label="t('customers.taxId')">
-      <UInput v-model="draft.tax_id" class="w-full" />
+      <UInput v-model="draft.tax_id" v-only="'code'" class="w-full" />
     </UFormField>
 
     <UFormField :label="t('customers.phone')">
-      <UInput v-model="draft.phone" class="w-full" />
+      <UInput v-model="draft.phone" v-only="'phone'" class="w-full" />
     </UFormField>
 
     <UFormField :label="t('customers.whatsapp')" :help="t('customers.whatsappHint')">
-      <UInput v-model="draft.whatsapp" class="w-full" />
+      <UInput v-model="draft.whatsapp" v-only="'phone'" class="w-full" />
     </UFormField>
 
     <UFormField :label="t('customers.email')">
@@ -68,7 +68,7 @@ const needsNationalId = computed(() => draft.value.kind === 'account')
     </UFormField>
 
     <UFormField :label="t('customers.code')" :help="t('customers.codeHint')">
-      <UInput v-model="draft.code" class="w-full" />
+      <UInput v-model="draft.code" v-only="'code'" class="w-full" />
     </UFormField>
 
     <UFormField :label="t('customers.address')" class="sm:col-span-2">
@@ -76,7 +76,7 @@ const needsNationalId = computed(() => draft.value.kind === 'account')
     </UFormField>
 
     <UFormField :label="t('customers.discountPercent')" :help="t('customers.discountPercentHint')">
-      <UInput v-model="draft.discount_percent" inputmode="decimal" class="w-full" />
+      <UInput v-model="draft.discount_percent" v-only="'decimal'" class="w-full" />
     </UFormField>
 
     <UFormField

@@ -77,6 +77,15 @@ describe('v-only', () => {
       expect(await price.type('1,234')).toBe('1234')
     })
 
+    it('el porcentaje pegado con su signo detrás sigue siendo decimal', async () => {
+      const discount = field('decimal')
+
+      // El `%` hacía que el valor no terminara en dígito y la coma pasaba por
+      // separador de miles: un descuento del doce y medio por ciento entraba
+      // como ciento veinticinco.
+      expect(await discount.type('12,5 %')).toBe('12.5')
+    })
+
     it('un solo separador, aunque se teclee de más', async () => {
       const price = field('decimal')
 
@@ -106,6 +115,38 @@ describe('v-only', () => {
     })
   })
 
+  describe('phone', () => {
+    it('la letra no entra, pero el guion del número sí', async () => {
+      const phone = field('phone')
+
+      // En Nicaragua el teléfono se escribe 8888-8888: filtrarlo a dígitos
+      // pelados sería pelear con quien copia una agenda entera.
+      expect(await phone.type('8888-8888 ext')).toBe('8888-8888 ')
+    })
+
+    it('el prefijo de país sobrevive adelante y no en el medio', async () => {
+      expect(await field('phone').type('+505 8888 8888')).toBe('+505 8888 8888')
+      expect(await field('phone').type('505+8888')).toBe('5058888')
+    })
+  })
+
+  describe('slug', () => {
+    it('el código de un rol va en minúsculas', async () => {
+      const role = field('slug')
+
+      // Al revés que `code`: los roles del instalador están sembrados en
+      // minúscula y un "CASHIER" tecleado a mano sería otro rol, sin que nada
+      // lo denuncie hasta que un permiso no aplica.
+      expect(await role.type('Cashier')).toBe('cashier')
+    })
+
+    it('sin espacios ni acentos', async () => {
+      const role = field('slug')
+
+      expect(await role.type('jefe de área')).toBe('jefederea')
+    })
+  })
+
   describe('code', () => {
     it('el código se escribe en mayúsculas mientras se teclea', async () => {
       const code = field('code')
@@ -113,6 +154,16 @@ describe('v-only', () => {
       // Los códigos se comparan: "caja-01" y "CAJA-01" son el mismo y tienen que
       // verse igual.
       expect(await code.type('caja-01')).toBe('CAJA-01')
+    })
+
+    it('la cédula entra tal cual, con su letra en mayúscula', async () => {
+      const nationalId = field('code')
+
+      // La cédula nicaragüense es `001-010180-0001A`: alfanumérica con guiones,
+      // exactamente la familia de `code`. Es además la clave natural con la que
+      // se fusionan persona, cliente y empleado (B-11), así que su forma tiene
+      // que ser una sola.
+      expect(await nationalId.type('001-010180-0001a')).toBe('001-010180-0001A')
     })
 
     it('sin espacios ni acentos: un código no los lleva', async () => {
